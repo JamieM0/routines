@@ -1,0 +1,10 @@
+{
+  "model": "llama3.1:8b-instruct-q5_K_M",
+  "parameters": {
+    "temperature": 0.7,
+    "max_tokens": 500
+  },
+  "input_text": "Commercial bread manufacturing.",
+  "estimated_num_queries_to_generate": 20,
+  "output_format": "text"
+}
