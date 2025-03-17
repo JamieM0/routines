@@ -6,5 +6,9 @@
   },
   "input_text": "Commercial bread manufacturing.",
   "estimated_num_queries_to_generate": 20,
-  "output_format": "text"
+  "output_format": "text",
+  "success_criteria": {
+    "stop_condition": "No new meaningful queries can be generated that add diversity",
+    "efficiency_goal": "Maximize the number of unique, high-quality search queries generated per run"
+  }
 }

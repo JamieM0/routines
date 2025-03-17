@@ -1,6 +1,7 @@
 import json
 import ollama
 import sys
+import uuid
 from datetime import datetime
 
 def load_json(filepath):
@@ -15,6 +16,10 @@ def generate_search_queries(input_data):
     Number of Search Queries to generate: {input_data["estimated_num_queries_to_generate"]}
     Output Format: {input_data["output_format"]}
     """
+
+    if "success_criteria" in input_data:
+        criteria_str = json.dumps(input_data["success_criteria"], indent=2)
+        prompt += f"\n\nSuccess Criteria:\n{criteria_str}"
 
     systemMsg = ("You are a search query generation assistant. "
                  "Your task is to take a given topic and generate multiple high-quality search engine queries that help retrieve comprehensive, relevant, and useful information. "
@@ -43,14 +48,15 @@ def save_output(output_data, output_filepath):
 
 def main():
     """Main function to run the search query generation routine."""
-    if len(sys.argv) != 3:
-        print("Usage: python search-queries.py <input_json> <output_json>")
+    if len(sys.argv) > 3 or len(sys.argv) <2:
+        print("Usage: python search-queries.py <input_json> [output_json]")
         sys.exit(1)
+    if (len(sys.argv) == 3):
+        output_filepath = sys.argv[2]
 
     print("Working...")
     start_time = datetime.now()  # Get the current datetime at the start
     input_filepath = sys.argv[1]
-    output_filepath = sys.argv[2]
 
     input_data = load_json(input_filepath)
     output_content = generate_search_queries(input_data)
@@ -61,12 +67,17 @@ def main():
 
     date_time_str = end_time.isoformat()
 
+    # Get a UUID for this output
+    output_uuid = str(uuid.uuid4())
+
+    if (len(sys.argv) == 2):
+        output_filepath = "output/search-queries/"+output_uuid+".json"
+
     output_data = {
+        "uuid": output_uuid,
         "date_created": date_time_str,
         "task": "Search Query Generations",
-        "model_used": input_data["model"],
         "time_taken": time_taken_str,  # Store as string
-        "input_text": input_data["input_text"],
         "search_queries": output_content.split("\n")
     }
 

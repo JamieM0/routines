@@ -1,14 +1,13 @@
 import json
 import ollama
 import sys
+import uuid
 from datetime import datetime
-
 
 def load_json(filepath):
     """Load JSON input file."""
     with open(filepath, "r", encoding="utf-8") as file:
         return json.load(file)
-
 
 def extract_step(input_data):
     """Extract steps based on the input text."""
@@ -32,6 +31,10 @@ Remember to:
 
 Each step should be on its own line, with no numbering.
 """
+
+    if "success_criteria" in input_data:
+        criteria_str = json.dumps(input_data["success_criteria"], indent=2)
+        prompt += f"\n\nSuccess Criteria:\n{criteria_str}"
 
     systemMsg = ("You are an AI assistant specialized in extracting actionable instructions from text. "
                  "Your task is to take an article, recipe, or guide and distill it into a clear, step-by-step list of instructions. Follow these guidelines: "
@@ -71,23 +74,22 @@ Each step should be on its own line, with no numbering.
     # Return cleaned steps as a single string with line breaks
     return "\n".join(steps)
 
-
 def save_output(output_data, output_filepath):
     """Save generated output to a JSON file."""
     with open(output_filepath, "w", encoding="utf-8") as file:
         json.dump(output_data, file, indent=4, ensure_ascii=False)
 
-
 def main():
     """Main function to run the search query generation routine."""
-    if len(sys.argv) != 3:
-        print("Usage: python extract-steps.py <input_json> <output_json>")
+    if len(sys.argv) > 3 or len(sys.argv) <2:
+        print("Usage: python extract-steps.py <input_json> [output_json]")
         sys.exit(1)
+    if (len(sys.argv) == 3):
+        output_filepath = sys.argv[2]
 
     print("Working...")
     start_time = datetime.now()  # Get the current datetime at the start
     input_filepath = sys.argv[1]
-    output_filepath = sys.argv[2]
 
     input_data = load_json(input_filepath)
     output_content = extract_step(input_data)
@@ -101,18 +103,22 @@ def main():
     # Split the output by newlines to get individual steps
     extracted_steps = [step for step in output_content.split("\n") if step.strip()]
 
+    # Get a UUID for this output
+    output_uuid = str(uuid.uuid4())
+
+    if (len(sys.argv) == 2):
+        output_filepath = "output/extract-steps/"+output_uuid+".json"
+
     output_data = {
+        "uuid": output_uuid,
         "date_created": date_time_str,
         "task": "Step Extraction",
-        "model_used": input_data["model"],
         "time_taken": time_taken_str,  # Store as string
-        "article_text": input_data["article_text"],
         "extracted_steps": extracted_steps
     }
 
     save_output(output_data, output_filepath)
     print(f"Extracted Steps, output saved to {output_filepath}")
-
 
 if __name__ == "__main__":
     main()

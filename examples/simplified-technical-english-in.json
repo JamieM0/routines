@@ -4,6 +4,9 @@
   "output_format": "plain text with paragraphs separated by blank lines",
   "parameters": {
     "temperature": 0.2,
-    "max_tokens": 500
+    "max_tokens": 1000
+  },
+  "success_criteria": {
+    "stop_condition": "The entire input text has been sufficiently converted to Simplified Technical English"
   }
 }
