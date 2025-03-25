@@ -108,6 +108,8 @@ def main():
 
     if (len(sys.argv) == 2):
         output_filepath = "output/extract-steps/"+output_uuid+".json"
+    else:
+        output_filepath = sys.argv[3]
 
     output_data = {
         "uuid": output_uuid,

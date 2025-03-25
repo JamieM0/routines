@@ -73,6 +73,8 @@ def main():
     output_uuid = str(uuid.uuid4())
     if (len(sys.argv) == 2):
         output_filepath = "output/summary/"+output_uuid+".json"
+    else:
+        output_filepath = sys.argv[3]
 
     output_data = {
         "uuid": output_uuid,
