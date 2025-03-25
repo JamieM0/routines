@@ -1,18 +1,14 @@
-import json
-import ollama
-import sys
-import uuid
 from datetime import datetime
+from utils import (
+    load_json, save_output, chat_with_llm,
+    create_output_metadata, get_output_filepath, handle_command_args
+)
 
-def load_json(filepath):
-    """Load JSON input file."""
-    with open(filepath, "r", encoding="utf-8") as file:
-        return json.load(file)
-
-def generate_facts(input_data):
-    """Generate a list of facts using an LLM based on input JSON parameters."""
-    # Define general system prompt within the code
-    systemMsg = (
+def generate_prompt_response(input_data):
+    """Generate a response to the user's prompt."""
+    prompt = input_data.get("prompt", "")
+    model = input_data.get("model", "gemma3")
+    system_message = (
         "You are a knowledgeable assistant specialized in providing accurate, concise, and informative facts about various topics. "
         "Your responses should be factual, specific, and organized. "
         "When asked about a subject, provide clear, detailed information based on your knowledge, focusing on relevant details. "
@@ -21,73 +17,42 @@ def generate_facts(input_data):
         "Focus on providing factual, educational content about the requested topic."
         "Focus on having a wide variety of facts."
         "Output the instructions in a simple list format with no numbers, symbols, markdown, or extra formatting. ")
+    parameters = input_data.get("parameters", {})
 
-    prompt = input_data["task"]
-    if "output_format" in input_data:
-        output_format = json.dumps(input_data["output_format"], indent=2)
-        prompt+=f"\n\nOutput Format:\n{output_format}"
-
-    if "success_criteria" in input_data:
-        criteria_str = json.dumps(input_data["success_criteria"], indent=2)
-        prompt += f"\n\nSuccess Criteria:\n{criteria_str}"
-
-    response = ollama.chat(
-        model=input_data["model"],
-        messages=[
-            {"role": "system", "content": systemMsg},
-            {"role": "user", "content": prompt}
-        ],
-        options=input_data.get("parameters", {})
-    )
-
-    return response["message"]["content"]
-
-def save_output(output_data, output_filepath):
-    """Save generated output to a JSON file."""
-    with open(output_filepath, "w", encoding="utf-8") as file:
-        json.dump(output_data, file, indent=4, ensure_ascii=False)
+    # Use chat_with_llm instead of direct ollama.chat
+    response_content = chat_with_llm(model, system_message, prompt, parameters)
+    
+    return response_content
 
 def main():
-    """Main function to run the fact generation routine."""
-    if len(sys.argv) > 3 or len(sys.argv) <2:
-        print("Usage: python prompt.py <input_json> [output_json]")
-        sys.exit(1)
-    if (len(sys.argv) == 3):
-        output_filepath = sys.argv[2]
+    """Main function to run the prompt response generation."""
+    usage_msg = "Usage: python prompt.py <input_json> [output_json]"
+    input_filepath, specified_output_filepath = handle_command_args(usage_msg)
 
     print("Working...")
-    start_time = datetime.now()  # Get the current datetime at the start
-    input_filepath = sys.argv[1]
-
+    start_time = datetime.now()
+    
     input_data = load_json(input_filepath)
-    output_content = generate_facts(input_data)
-    end_time = datetime.now()  # Get the current datetime at the end
-
-    time_taken = end_time - start_time
-    time_taken_str = str(time_taken)
-
-    date_time_str = end_time.isoformat()
-
-    # Process the output content - split by new lines and clean up
-    facts_list = [fact.strip() for fact in output_content.split("\n") if fact.strip()]
-
-    # Get a UUID for this output
-    output_uuid = str(uuid.uuid4())
-
-    if (len(sys.argv) == 2):
-        output_filepath = "output/prompt/"+output_uuid+".json"
-    else:
-        output_filepath = sys.argv[3]
-
+    response_content = generate_prompt_response(input_data)
+    
+    # Get output filepath and UUID
+    output_filepath, output_uuid = get_output_filepath(
+        "prompt", 
+        specified_path=specified_output_filepath
+    )
+    
+    # Create metadata
+    metadata = create_output_metadata("Prompt Response", start_time, output_uuid)
+    
+    # Combine metadata with output content
     output_data = {
-        "uuid": output_uuid,
-        "date_created": date_time_str,
-        "time_taken": time_taken_str,  # Store as string
-        "facts": facts_list
+        **metadata,
+        "prompt": input_data.get("prompt", ""),
+        "response": response_content.split("\n")
     }
 
     save_output(output_data, output_filepath)
-    print(f"Generated facts, saved to {output_filepath}")
+    print(f"Generated response, output saved to {output_filepath}")
 
 if __name__ == "__main__":
     main()

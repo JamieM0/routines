@@ -3,7 +3,7 @@ import json
 import sys
 import uuid
 from datetime import datetime
-from uno_utils import (
+from utils import (
     load_json, save_output, chat_with_llm, parse_llm_json_response,
     create_output_metadata, get_output_filepath, handle_command_args
 )
@@ -39,8 +39,8 @@ def generate_task_tree(input_data):
         response_text = chat_with_llm(model, system_msg, user_msg, parameters)
         
         try:
-            # Use parse_llm_json_response utility
-            parsed_steps = parse_llm_json_response(response_text)
+            # Use parse_llm_json_response utility with include_children=True for hierarchical data
+            parsed_steps = parse_llm_json_response(response_text, include_children=True)
             
             if isinstance(parsed_steps, list):
                 # Process each step recursively if we're not at max depth

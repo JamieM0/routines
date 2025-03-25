@@ -1,96 +1,72 @@
 # Usage note: use the model llama3.1:8b-instruct-q5_K_M for better results.
 import json
-import ollama
 import sys
 import uuid
 from datetime import datetime
 import re
-
-def load_json(filepath):
-    """Load JSON input file."""
-    with open(filepath, "r", encoding="utf-8") as file:
-        return json.load(file)
+from utils import (
+    load_json, save_output, chat_with_llm, parse_llm_json_response,
+    create_output_metadata, get_output_filepath, handle_command_args
+)
 
 def merge_duplicate_facts(input_data):
-    """Merge duplicate or similar facts from the input list"""
-    prompt = "Merge the following duplicate or similar facts carefully. Avoid under-merging (keeping redundant facts) and over-merging (losing important details). Here are the facts:\n\n"
-    for fact in input_data.get("facts", []):
-        prompt += f"- {fact}\n"
+    """Merge duplicate or similar facts in the input list."""
+    facts = input_data.get("facts", [])
+    model = input_data.get("model", "gemma3")
+    parameters = input_data.get("parameters", {})
 
-    if "output_format" in input_data:
-        prompt += f"\n\nProvide output as: {input_data['output_format']}"
-
-    if "success_criteria" in input_data:
-        criteria_str = json.dumps(input_data["success_criteria"], indent=2)
-        prompt += f"\n\nSuccess Criteria:\n{criteria_str}"
-
-    systemMsg = (
-        "You are an AI assistant specialized in merging duplicate facts. "
-        "Your goal is to combine facts that are identical or very similar, ensuring that unique details are preserved. "
-        "Do not merge facts if slight differences contribute additional information. "
-        "Provide a final list of unique, merged facts in a clear and concise manner. "
-        "Each merged fact should be on its own line. Do not number the facts. "
-        "Do not explain your reasoning. Do not add any conversational context. Do not output anything other than the merged facts."
+    system_msg = (
+        "You are an AI assistant that identifies duplicate or similar facts in a list. "
+        "When you find duplicates, merge them into a single, comprehensive fact. "
+        "Organize the facts logically and remove redundancy. "
+        "Format your response as a JSON array of strings, where each string is a unique fact. "
+        "Your entire response must be parseable as JSON."
     )
-
-    response = ollama.chat(
-        model=input_data["model"],
-        messages=[{"role": "system", "content": systemMsg},
-                  {"role": "user", "content": prompt}],
-        options=input_data.get("parameters", {})
+    
+    user_msg = (
+        "Identify duplicate or similar facts in the following list and merge them into unique facts:\n\n" +
+        "\n".join([f"- {fact}" for fact in facts])
     )
-
-    return response["message"]["content"]
-
-def save_output(output_data, output_filepath):
-    """Save generated output to a JSON file."""
-    with open(output_filepath, "w", encoding="utf-8") as file:
-        json.dump(output_data, file, indent=4, ensure_ascii=False)
+    
+    # Use chat_with_llm instead of direct ollama.chat
+    response_text = chat_with_llm(model, system_msg, user_msg, parameters)
+    
+    # Use parse_llm_json_response utility
+    merged_facts = parse_llm_json_response(response_text, include_children=False)
+    
+    if not isinstance(merged_facts, list):
+        merged_facts = ["No valid facts could be merged"]
+    
+    return merged_facts
 
 def main():
-    """Main function to merge duplicate facts."""
-    if len(sys.argv) > 3 or len(sys.argv) < 2:
-        print("Usage: python merge-duplicate-facts.py <input_json> [output_json]")
-        sys.exit(1)
-    if len(sys.argv) == 3:
-        output_filepath = sys.argv[2]
+    """Main function to run the fact merging."""
+    usage_msg = "Usage: python merge-duplicate-facts.py <input_json> [output_json]"
+    input_filepath, specified_output_filepath = handle_command_args(usage_msg)
+
     print("Working...")
     start_time = datetime.now()
-    input_filepath = sys.argv[1]
-
+    
     input_data = load_json(input_filepath)
-    output_content = merge_duplicate_facts(input_data)
-    end_time = datetime.now()
-
-    time_taken = end_time - start_time
-    time_taken_str = str(time_taken)
-    date_time_str = end_time.isoformat()
-
-    # Process output to properly separate facts
-    # First clean up any markdown formatting that might be present
-    output_content = re.sub(r'^- ', '', output_content, flags=re.MULTILINE)
-    output_content = re.sub(r'^[0-9]+\. ', '', output_content, flags=re.MULTILINE)
-
-    # Split by newlines and filter out empty lines
-    output_lines = [line.strip() for line in output_content.split('\n') if line.strip()]
-
-    # Get a UUID for this output
-    output_uuid = str(uuid.uuid4())
-    if len(sys.argv) == 2:
-        output_filepath = "output/merge-duplicate-facts/" + output_uuid + ".json"
-    else:
-        output_filepath = sys.argv[3]
-
+    merged_facts = merge_duplicate_facts(input_data)
+    
+    # Get output filepath and UUID
+    output_filepath, output_uuid = get_output_filepath(
+        "merge-duplicate-facts", 
+        specified_path=specified_output_filepath
+    )
+    
+    # Create metadata
+    metadata = create_output_metadata("Merge Duplicate Facts", start_time, output_uuid)
+    
+    # Combine metadata with output content
     output_data = {
-        "uuid": output_uuid,
-        "date_created": date_time_str,
-        "task": "Merge Duplicate Facts",
-        "time_taken": time_taken_str,
-        "merged_facts": output_lines
+        **metadata,
+        "merged_facts": merged_facts
     }
 
     save_output(output_data, output_filepath)
-    print(f"Merged Duplicate Facts, output saved to {output_filepath}")
+    print(f"Merged facts, output saved to {output_filepath}")
 
 if __name__ == "__main__":
     main()

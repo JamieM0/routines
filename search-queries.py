@@ -1,25 +1,14 @@
-import json
-import ollama
-import sys
-import uuid
 from datetime import datetime
-
-def load_json(filepath):
-    """Load JSON input file."""
-    with open(filepath, "r", encoding="utf-8") as file:
-        return json.load(file)
+from utils import (
+    load_json, save_output, chat_with_llm, parse_llm_json_response,
+    create_output_metadata, get_output_filepath, handle_command_args
+)
 
 def generate_search_queries(input_data):
-    """Generate search queries based on the input text."""
-    prompt = f"""
-    {" ".join(input_data.get("input_text", []))}
-    Number of Search Queries to generate: {input_data["estimated_num_queries_to_generate"]}
-    Output Format: {input_data["output_format"]}
-    """
-
-    if "success_criteria" in input_data:
-        criteria_str = json.dumps(input_data["success_criteria"], indent=2)
-        prompt += f"\n\nSuccess Criteria:\n{criteria_str}"
+    """Generate search queries based on the input topic."""
+    topic = input_data.get("topic", "")
+    model = input_data.get("model", "gemma3")
+    parameters = input_data.get("parameters", {})
 
     systemMsg = ("You are a search query generation assistant. "
                  "Your task is to take a given topic and generate multiple high-quality search engine queries that help retrieve comprehensive, relevant, and useful information. "
@@ -31,60 +20,49 @@ def generate_search_queries(input_data):
                  "Advanced search operator queries (e.g., site:, filetype:, intitle:) for precision."
                  "Output the queries in a simple list format with no numbers, symbols, or extra formatting."
                  "Separate each query with a single newline.")
-
-    response = ollama.chat(
-        model=input_data["model"],
-        messages=[{"role": "system", "content": systemMsg},
-                  {"role": "user", "content": prompt}],
-        options=input_data.get("parameters", {})
-    )
-
-    return response["message"]["content"]
-
-def save_output(output_data, output_filepath):
-    """Save generated output to a JSON file."""
-    with open(output_filepath, "w", encoding="utf-8") as file:
-        json.dump(output_data, file, indent=4, ensure_ascii=False)
+    
+    user_msg = f"Generate search queries for the following topic:\n\n{topic}"
+    
+    # Use chat_with_llm instead of direct ollama.chat
+    response_text = chat_with_llm(model, system_msg, user_msg, parameters)
+    
+    # Use parse_llm_json_response utility
+    queries = parse_llm_json_response(response_text, include_children=False)
+    
+    if not isinstance(queries, list):
+        queries = ["No valid search queries could be generated"]
+    
+    return queries
 
 def main():
-    """Main function to run the search query generation routine."""
-    if len(sys.argv) > 3 or len(sys.argv) <2:
-        print("Usage: python search-queries.py <input_json> [output_json]")
-        sys.exit(1)
-    if (len(sys.argv) == 3):
-        output_filepath = sys.argv[2]
+    """Main function to run the search query generation."""
+    usage_msg = "Usage: python search-queries.py <input_json> [output_json]"
+    input_filepath, specified_output_filepath = handle_command_args(usage_msg)
 
     print("Working...")
-    start_time = datetime.now()  # Get the current datetime at the start
-    input_filepath = sys.argv[1]
-
+    start_time = datetime.now()
+    
     input_data = load_json(input_filepath)
-    output_content = generate_search_queries(input_data)
-    end_time = datetime.now()  # Get the current datetime at the end
-
-    time_taken = end_time - start_time
-    time_taken_str = str(time_taken)
-
-    date_time_str = end_time.isoformat()
-
-    # Get a UUID for this output
-    output_uuid = str(uuid.uuid4())
-
-    if (len(sys.argv) == 2):
-        output_filepath = "output/search-queries/"+output_uuid+".json"
-    else:
-        output_filepath = sys.argv[3]
-
+    queries = generate_search_queries(input_data)
+    
+    # Get output filepath and UUID
+    output_filepath, output_uuid = get_output_filepath(
+        "search-queries", 
+        specified_path=specified_output_filepath
+    )
+    
+    # Create metadata
+    metadata = create_output_metadata("Search Queries", start_time, output_uuid)
+    
+    # Combine metadata with output content
     output_data = {
-        "uuid": output_uuid,
-        "date_created": date_time_str,
-        "task": "Search Query Generations",
-        "time_taken": time_taken_str,  # Store as string
-        "search_queries": output_content.split("\n")
+        **metadata,
+        "topic": input_data.get("topic", ""),
+        "queries": queries
     }
 
     save_output(output_data, output_filepath)
-    print(f"Generated Search Queries, output saved to {output_filepath}")
+    print(f"Generated search queries, output saved to {output_filepath}")
 
 if __name__ == "__main__":
     main()

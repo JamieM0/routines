@@ -73,17 +73,27 @@ def clean_llm_json_response(response_text):
     response_text = response_text.replace("```json", "").replace("```", "").strip()
     return response_text
 
-def parse_llm_json_response(response_text):
-    """Parse JSON from an LLM response with fallback handling."""
+def parse_llm_json_response(response_text, include_children=False):
+    """Parse JSON from an LLM response with fallback handling.
+    
+    Args:
+        response_text: The text response from the LLM
+        include_children: Whether to include empty children arrays for hierarchical data
+    """
     cleaned_text = clean_llm_json_response(response_text)
     
     try:
         return json.loads(cleaned_text)
     except json.JSONDecodeError:
         # Fallback: return each line as a separate item
-        return [{"step": s.strip(), "children": []} 
-                for s in cleaned_text.split("\n") 
-                if s.strip() and not s.strip().startswith('#')]
+        if include_children:
+            return [{"step": s.strip(), "children": []} 
+                    for s in cleaned_text.split("\n") 
+                    if s.strip() and not s.strip().startswith('#')]
+        else:
+            return [{"step": s.strip()} 
+                    for s in cleaned_text.split("\n") 
+                    if s.strip() and not s.strip().startswith('#')]
 
 def create_output_metadata(task_name, start_time, output_uuid=None):
     """Create standard metadata for output files."""
