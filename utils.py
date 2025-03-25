@@ -118,8 +118,11 @@ def get_output_filepath(output_dir, output_uuid=None, specified_path=None):
     if output_uuid is None:
         output_uuid = str(uuid.uuid4())
     
-    os.makedirs(f"output/{output_dir}", exist_ok=True)
-    return f"output/{output_dir}/{output_uuid}.json", output_uuid
+    # Ensure output directory exists
+    output_path = f"output/{output_dir}"
+    os.makedirs(output_path, exist_ok=True)
+    
+    return f"{output_path}/{output_uuid}.json", output_uuid
 
 def handle_command_args(usage_msg, min_args=1, max_args=2):
     """Process command line arguments with validation."""

@@ -126,9 +126,13 @@ def update_tree_at_path(tree, path, new_node):
     return updated_tree
 
 def parse_path_string(path_str):
-    """Convert a path string like '1-0-2' to a list of integers [1, 0, 2]."""
+    """Convert a path string like '1-0-2' or '4' to a list of integers [1, 0, 2] or [4]."""
     try:
-        return [int(i) for i in path_str.split('-')]
+        # Handle both dash-separated paths and single numbers
+        if '-' in path_str:
+            return [int(i) for i in path_str.split('-')]
+        else:
+            return [int(path_str)]
     except ValueError:
         return None
 
@@ -147,8 +151,9 @@ def handle_expand_node_args():
     # Process the second argument - could be a node path or output filepath
     if len(sys.argv) >= 3:
         arg2 = sys.argv[2]
-        # If it contains dashes and doesn't end with .json, treat as node path
-        if '-' in arg2 and not arg2.endswith('.json'):
+        # If it doesn't end with .json and can be parsed as a number or contains dashes
+        # treat it as a node path
+        if not arg2.endswith('.json') and (arg2.replace('-', '').isdigit() or '-' in arg2):
             node_path_str = arg2
         else:
             output_filepath = arg2
@@ -173,8 +178,11 @@ def main():
     # If the input file is an output file, extract the tree from it
     if isinstance(input_data, dict) and "tree" in input_data and isinstance(input_data["tree"], dict):
         tree = input_data["tree"]
+        # Also extract other useful parameters if they exist
+        model = input_data.get("model", "gemma3")
     else:
         tree = input_data.get("tree", input_data)
+        model = input_data.get("model", "gemma3")
     
     # Normalize the tree specifically for expansion
     tree = normalize_tree_for_expansion(tree)
@@ -187,7 +195,8 @@ def main():
         node_path = input_data.get("node_path", [])
     
     node_step = input_data.get("node_step", None)
-    model = input_data.get("model", "gemma3")
+    
+    # Extract parameters from input if available
     parameters = input_data.get("parameters", {})
     depth = input_data.get("depth", 1)
     replace_existing = input_data.get("replace_existing", True)
@@ -197,12 +206,27 @@ def main():
     target_node = None
     node_path_in_tree = []
     
+    # If no node is specified or not found by path_str, try to handle gracefully
     if node_path:
         print(f"Searching for node at path: {node_path}")
         target_node, node_path_in_tree = find_node_by_path(tree, node_path)
+        
+        # Debug info if node not found
+        if not target_node:
+            print(f"WARNING: Node at path {node_path} not found.")
+            print(f"Available paths at root level: 0 to {len(tree.get('children', [])) - 1}")
     elif node_step:
         print(f"Searching for node with text: '{node_step}'")
         target_node, node_path_in_tree = find_node_by_step_text(tree, node_step)
+    else:
+        # If no node is specified, default to expanding the root node
+        print("No node specified, expanding the root node.")
+        target_node, node_path_in_tree = tree, []
+        
+        # Alternative: Let the user choose a node interactively
+        # print_tree_nodes(tree)
+        # node_choice = input("Enter the number of the node to expand: ")
+        # ...
     
     if not target_node:
         print(f"Error: Could not find the specified node in the tree.")
@@ -239,6 +263,12 @@ def main():
         "expanded_node_path": node_path_in_tree,
         "expanded_node_step": target_node.get("step", "")
     }
+    
+    # Double-check output_filepath is valid before trying to save
+    if not output_filepath:
+        output_filepath = f"output/expand-node/{uuid.uuid4()}.json"
+        os.makedirs(os.path.dirname(output_filepath), exist_ok=True)
+        print(f"Using default output filepath: {output_filepath}")
     
     save_output(output_data, output_filepath)
     print(f"Node expanded, updated tree saved to {output_filepath}")
