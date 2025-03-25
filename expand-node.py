@@ -69,7 +69,7 @@ def expand_node(node, model, parameters=None, depth=1, replace_existing=True, nu
     if not isinstance(substeps, list):
         substeps = [{"step": "No valid substeps could be generated", "children": []}]
     
-    # Copy the node to avoid modifying the original
+    # Clone the node to avoid modifying the original
     expanded_node = {**node}
     
     # Update the children based on the replace_existing flag
@@ -86,7 +86,7 @@ def update_tree_at_path(tree, path, new_node):
     if not path:  # We're updating the root node
         return new_node
     
-    # Create a copy of the tree to avoid modifying the original
+    # Create a deep copy of the tree to avoid modifying the original
     updated_tree = json.loads(json.dumps(tree))
     
     # Navigate to the parent of the target node
@@ -159,6 +159,8 @@ def main():
         "expand-node",
         specified_path=specified_output_filepath
     )
+    
+    # Create metadata
     metadata = create_output_metadata("Node Expansion", start_time, output_uuid)
     
     # Combine metadata with the updated tree
