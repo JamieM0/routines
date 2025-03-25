@@ -1,8 +1,9 @@
 import json
 import sys
 import os
+import re
 from datetime import datetime
-from uno_utils import (
+from utils import (
     load_json, save_output, chat_with_llm, parse_llm_json_response,
     create_output_metadata, get_output_filepath, handle_command_args
 )
@@ -31,17 +32,33 @@ def find_node_by_step_text(tree, step_text, path=None):
     if tree.get("step") == step_text:
         return tree, path
     
-    for i, child in enumerate(tree.get("children", [])):
+    # Handle case where node doesn't have children array yet
+    children = tree.get("children", [])
+    for i, child in enumerate(children):
         found, child_path = find_node_by_step_text(child, step_text, path + [i])
         if found:
             return found, child_path
     
     return None, None
 
+def normalize_tree_for_expansion(tree):
+    """Ensure all nodes in the tree have a children property."""
+    if isinstance(tree, dict):
+        if "step" in tree and "children" not in tree:
+            tree["children"] = []
+        if "children" in tree:
+            for child in tree["children"]:
+                normalize_tree_for_expansion(child)
+    return tree
+
 def expand_node(node, model, parameters=None, depth=1, replace_existing=True, num_substeps=None):
     """Expand a node into more detailed substeps."""
     if parameters is None:
         parameters = {}
+    
+    # Ensure node has a children property before expansion
+    if "children" not in node:
+        node["children"] = []
     
     # Allow customizing the number of substeps
     substep_range = "3-7" if num_substeps is None else str(num_substeps)
@@ -63,7 +80,7 @@ def expand_node(node, model, parameters=None, depth=1, replace_existing=True, nu
     
     response_text = chat_with_llm(model, system_msg, user_msg, parameters)
     
-    # Parse the LLM response with children arrays for hierarchical data
+    # Parse the LLM response with include_children=True for hierarchical data
     substeps = parse_llm_json_response(response_text, include_children=True)
     
     if not isinstance(substeps, list):
@@ -108,17 +125,67 @@ def update_tree_at_path(tree, path, new_node):
     
     return updated_tree
 
+def parse_path_string(path_str):
+    """Convert a path string like '1-0-2' to a list of integers [1, 0, 2]."""
+    try:
+        return [int(i) for i in path_str.split('-')]
+    except ValueError:
+        return None
+
+def handle_expand_node_args():
+    """Custom argument handling for expand-node.py to support node path specification."""
+    usage_msg = "Usage: python expand-node.py <input_json> [node_path] [output_json]\nExample: python expand-node.py input.json 1-0-2 output.json"
+    
+    if len(sys.argv) < 2 or len(sys.argv) > 4:
+        print(usage_msg)
+        sys.exit(1)
+        
+    input_filepath = sys.argv[1]
+    node_path_str = None
+    output_filepath = None
+    
+    # Process the second argument - could be a node path or output filepath
+    if len(sys.argv) >= 3:
+        arg2 = sys.argv[2]
+        # If it contains dashes and doesn't end with .json, treat as node path
+        if '-' in arg2 and not arg2.endswith('.json'):
+            node_path_str = arg2
+        else:
+            output_filepath = arg2
+    
+    # Process the third argument - must be output filepath
+    if len(sys.argv) >= 4:
+        output_filepath = sys.argv[3]
+    
+    return input_filepath, node_path_str, output_filepath
+
 def main():
     """Main function to run the node expansion routine."""
-    usage_msg = "Usage: python expand-node.py <input_json> [output_json]"
-    input_filepath, specified_output_filepath = handle_command_args(usage_msg)
+    input_filepath, node_path_str, specified_output_filepath = handle_expand_node_args()
     
     print("Working...")
     start_time = datetime.now()
     
+    # Load input data
     input_data = load_json(input_filepath)
-    tree = input_data.get("tree", {})
-    node_path = input_data.get("node_path", [])
+    
+    # Handle both standard input format and output file format
+    # If the input file is an output file, extract the tree from it
+    if isinstance(input_data, dict) and "tree" in input_data and isinstance(input_data["tree"], dict):
+        tree = input_data["tree"]
+    else:
+        tree = input_data.get("tree", input_data)
+    
+    # Normalize the tree specifically for expansion
+    tree = normalize_tree_for_expansion(tree)
+    
+    # Get node path from command line or input data
+    node_path = None
+    if node_path_str:
+        node_path = parse_path_string(node_path_str)
+    else:
+        node_path = input_data.get("node_path", [])
+    
     node_step = input_data.get("node_step", None)
     model = input_data.get("model", "gemma3")
     parameters = input_data.get("parameters", {})
@@ -131,8 +198,10 @@ def main():
     node_path_in_tree = []
     
     if node_path:
+        print(f"Searching for node at path: {node_path}")
         target_node, node_path_in_tree = find_node_by_path(tree, node_path)
     elif node_step:
+        print(f"Searching for node with text: '{node_step}'")
         target_node, node_path_in_tree = find_node_by_step_text(tree, node_step)
     
     if not target_node:
