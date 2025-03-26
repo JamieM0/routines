@@ -54,17 +54,12 @@ def save_tree_to_filesystem(tree, base_path, parent_uuid=None):
         if not child_name:
             child_name = "step"
             
-        # Append the UUID (shortened for readability)
-        short_uuid = child["uuid"].split('-')[0]  # Take just first segment
-        dir_name = f"{child_name}_{short_uuid}"
+        # Use full UUID in directory name
+        dir_name = f"{child_name}_{child['uuid']}"
         
-        # Check if the directory already exists (should be unlikely with UUIDs)
+        # Create child directory
         child_path = os.path.join(base_path, dir_name)
-        if os.path.exists(child_path):
-            # In the unlikely case of a collision, use the full UUID
-            dir_name = f"{child_name}_{child['uuid']}"
-            child_path = os.path.join(base_path, dir_name)
-            
+        
         # Pass the current node's UUID as the parent UUID for the child
         save_tree_to_filesystem(child, child_path, tree["uuid"])
     
