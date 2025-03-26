@@ -19,7 +19,7 @@ def sanitize_filename(name):
     # Ensure it's not too long
     return sanitized[:40]  # Shortened to leave room for the UUID
 
-def save_tree_to_filesystem(tree, base_path):
+def save_tree_to_filesystem(tree, base_path, parent_uuid=None):
     """Save a tree structure to the filesystem where each node is a directory."""
     # Create the base directory if it doesn't exist
     os.makedirs(base_path, exist_ok=True)
@@ -33,6 +33,11 @@ def save_tree_to_filesystem(tree, base_path):
         "step": tree["step"],
         "uuid": tree["uuid"]
     }
+    
+    # Add parent UUID reference if this isn't the root node
+    if parent_uuid:
+        node_details["parent_uuid"] = parent_uuid
+    
     with open(os.path.join(base_path, "node.json"), "w", encoding="utf-8") as f:
         json.dump(node_details, f, indent=4)
     
@@ -60,7 +65,8 @@ def save_tree_to_filesystem(tree, base_path):
             dir_name = f"{child_name}_{child['uuid']}"
             child_path = os.path.join(base_path, dir_name)
             
-        save_tree_to_filesystem(child, child_path)
+        # Pass the current node's UUID as the parent UUID for the child
+        save_tree_to_filesystem(child, child_path, tree["uuid"])
     
     return base_path
 
