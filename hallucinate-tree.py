@@ -6,7 +6,7 @@ import re
 from datetime import datetime
 from utils import (
     load_json, save_output, chat_with_llm, parse_llm_json_response,
-    create_output_metadata, get_output_filepath, handle_command_args
+    create_output_metadata, get_output_filepath, handle_command_args, translate_to_basic_english
 )
 
 def sanitize_filename(name):
@@ -47,8 +47,14 @@ def save_tree_to_filesystem(tree, base_path, parent_uuid=None):
         if "uuid" not in child:
             child["uuid"] = str(uuid.uuid4())
         
-        # Create directory name: sanitized_name_uuid
-        child_name = sanitize_filename(child["step"])
+        # Get the child's step text
+        child_step = child["step"]
+        
+        # Translate step text to Basic English
+        basic_english_step = translate_to_basic_english(child_step)
+        
+        # Create directory name from Basic English version
+        child_name = sanitize_filename(basic_english_step)
         
         # If sanitizing results in an empty string, use a generic name
         if not child_name:

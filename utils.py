@@ -134,3 +134,28 @@ def handle_command_args(usage_msg, min_args=1, max_args=2):
     output_filepath = sys.argv[2] if len(sys.argv) > 2 else None
     
     return input_filepath, output_filepath
+
+def translate_to_basic_english(text, model="gemma3", parameters=None):
+    """Convert text to Basic English for use in folder names."""
+    if parameters is None:
+        parameters = {}
+    
+    system_msg = ("Convert the given text into BASIC English. "
+                 "Use only words from the BASIC English list (850 words). "
+                 "Make all sentences short, clear, and simple. "
+                 "Keep ONLY essential words needed to understand the meaning. "
+                 "Make output VERY short, suitable for a folder name. "
+                 "Output only the translated text without explanations.")
+    
+    user_msg = ("Convert to short, simple BASIC English for folder name. "
+                "Do not use special symbols that aren't allowed in file/folder names. "
+                f"Use a MAXIMUM of 4 words, ensure that the meaning is understandable: {text}")
+    
+    # Use chat_with_llm to translate the text
+    response = chat_with_llm(model, system_msg, user_msg, parameters)
+    
+    # Clean up the response to ensure it's suitable for a folder name
+    response = response.strip().split("\n")[0]
+    
+    # Limit length for folder name suitability
+    return response[:50]
