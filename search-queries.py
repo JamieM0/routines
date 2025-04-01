@@ -24,7 +24,7 @@ def generate_search_queries(input_data):
     user_msg = f"Generate search queries for the following topic:\n\n{topic}"
     
     # Use chat_with_llm instead of direct ollama.chat
-    response_text = chat_with_llm(model, system_msg, user_msg, parameters)
+    response_text = chat_with_llm(model, systemMsg, user_msg, parameters)
     
     # Use parse_llm_json_response utility
     queries = parse_llm_json_response(response_text, include_children=False)
