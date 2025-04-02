@@ -2,63 +2,94 @@ import json
 import sys
 import os
 import re
+import uuid
 from datetime import datetime
 from utils import (
     load_json, save_output, chat_with_llm, parse_llm_json_response,
-    create_output_metadata, get_output_filepath, handle_command_args
+    create_output_metadata, get_output_filepath
 )
 
-def find_node_by_path(tree, path):
-    """Find a node in the tree using a path of indices."""
-    if not path:
-        return tree, []
-    
-    current = tree
-    current_path = []
-    
-    for index in path:
-        if not isinstance(index, int) or "children" not in current or index >= len(current["children"]):
-            return None, []
-        current = current["children"][index]
-        current_path.append(index)
-    
-    return current, current_path
+def sanitize_filename(name):
+    """Convert a step name to a valid directory name using lowercase and underscores."""
+    # Convert to lowercase
+    sanitized = name.lower()
+    # Remove invalid characters and replace spaces/hyphens with underscores
+    sanitized = re.sub(r'[^\w\s-]', '', sanitized)
+    sanitized = re.sub(r'[\s-]+', '_', sanitized)
+    # Ensure it's not too long
+    return sanitized[:40]  # Shortened to leave room for the UUID
 
-def find_node_by_step_text(tree, step_text, path=None):
-    """Find a node in the tree by matching the step text."""
-    if path is None:
-        path = []
+def find_node_by_path(base_dir, path_indices):
+    """Find a node in the filesystem tree using a path of indices."""
+    if not path_indices:
+        # Return the root node
+        node_path = os.path.join(base_dir, "node.json")
+        if os.path.exists(node_path):
+            try:
+                with open(node_path, 'r') as f:
+                    return json.load(f), base_dir
+            except json.JSONDecodeError:
+                return None, None
+        return None, None
     
-    if tree.get("step") == step_text:
-        return tree, path
+    # Start at the base directory
+    current_dir = base_dir
     
-    # Handle case where node doesn't have children array yet
-    children = tree.get("children", [])
-    for i, child in enumerate(children):
-        found, child_path = find_node_by_step_text(child, step_text, path + [i])
-        if found:
-            return found, child_path
+    # Navigate through subdirectories based on index
+    for index in path_indices:
+        # Get all subdirectories (only directories, not files)
+        subdirs = [d for d in os.listdir(current_dir) 
+                   if os.path.isdir(os.path.join(current_dir, d)) 
+                   and d != "." and d != ".." and not d.startswith('.')]
+        
+        # Sort subdirectories alphabetically for consistent indexing
+        subdirs.sort()
+        
+        if index < 0 or index >= len(subdirs):
+            print(f"Path index {index} is out of range. Available range: 0-{len(subdirs)-1}")
+            return None, None
+        
+        # Move to the next subdirectory
+        current_dir = os.path.join(current_dir, subdirs[index])
+    
+    # Read the node.json from the final directory
+    node_path = os.path.join(current_dir, "node.json")
+    if os.path.exists(node_path):
+        try:
+            with open(node_path, 'r') as f:
+                return json.load(f), current_dir
+        except json.JSONDecodeError:
+            return None, None
     
     return None, None
 
-def normalize_tree_for_expansion(tree):
-    """Ensure all nodes in the tree have a children property."""
-    if isinstance(tree, dict):
-        if "step" in tree and "children" not in tree:
-            tree["children"] = []
-        if "children" in tree:
-            for child in tree["children"]:
-                normalize_tree_for_expansion(child)
-    return tree
+def find_node_by_uuid(search_uuid, base_dir):
+    """Find a node in the filesystem tree by its UUID."""
+    search_uuid = search_uuid.lower()
+    
+    for root, dirs, files in os.walk(base_dir):
+        if "node.json" in files:
+            node_path = os.path.join(root, "node.json")
+            try:
+                with open(node_path, 'r') as f:
+                    node_data = json.load(f)
+                    if node_data.get("uuid", "").lower() == search_uuid:
+                        return node_data, root
+            except json.JSONDecodeError:
+                continue
+    
+    return None, None
 
-def expand_node(node, model, parameters=None, depth=1, replace_existing=True, num_substeps=None):
-    """Expand a node into more detailed substeps."""
+def expand_node_in_filesystem(node_data, node_dir, model, parameters=None, num_substeps=None):
+    """Expand a node by creating child directories with substeps."""
     if parameters is None:
         parameters = {}
     
-    # Ensure node has a children property before expansion
-    if "children" not in node:
-        node["children"] = []
+    # Get the node step and UUID
+    step = node_data.get("step", "Unknown step")
+    node_uuid = node_data.get("uuid", str(uuid.uuid4()))
+    
+    print(f"Expanding node: '{step}'")
     
     # Allow customizing the number of substeps
     substep_range = "3-7" if num_substeps is None else str(num_substeps)
@@ -74,56 +105,55 @@ def expand_node(node, model, parameters=None, depth=1, replace_existing=True, nu
     
     user_msg = (
         f"Break down the following task into {substep_range} detailed substeps:\n\n"
-        f"Task: {node.get('step', 'Unknown Task')}\n\n"
+        f"Task: {step}\n\n"
         "Return ONLY a JSON array of step objects, with no markdown formatting, code blocks, or extra text."
     )
     
     response_text = chat_with_llm(model, system_msg, user_msg, parameters)
     
-    # Parse the LLM response with include_children=True for hierarchical data
-    substeps = parse_llm_json_response(response_text, include_children=True)
+    # Parse the LLM response
+    substeps = parse_llm_json_response(response_text)
     
-    if not isinstance(substeps, list):
-        substeps = [{"step": "No valid substeps could be generated", "children": []}]
+    if not isinstance(substeps, list) or len(substeps) == 0:
+        print("Error: No valid substeps could be generated")
+        return []
     
-    # Clone the node to avoid modifying the original
-    expanded_node = {**node}
+    # Create subdirectories for each substep
+    created_dirs = []
+    for substep in substeps:
+        substep_text = substep.get("step", "Unnamed step")
+        
+        # Generate UUID for the substep
+        substep_uuid = str(uuid.uuid4())
+        
+        # Create directory name: sanitized_name_full_uuid
+        substep_name = sanitize_filename(substep_text)
+        if not substep_name:
+            substep_name = "step"
+        
+        # Use full UUID in directory name
+        dir_name = f"{substep_name}_{substep_uuid}"
+        
+        # Create the subdirectory
+        substep_dir = os.path.join(node_dir, dir_name)
+        os.makedirs(substep_dir, exist_ok=True)
+        
+        # Create node.json for the substep
+        substep_data = {
+            "step": substep_text,
+            "uuid": substep_uuid,
+            "parent_uuid": node_uuid
+        }
+        
+        with open(os.path.join(substep_dir, "node.json"), "w") as f:
+            json.dump(substep_data, f, indent=4)
+        
+        created_dirs.append({
+            "directory": substep_dir,
+            "data": substep_data
+        })
     
-    # Update the children based on the replace_existing flag
-    if replace_existing or "children" not in node or not node["children"]:
-        expanded_node["children"] = substeps
-    else:
-        # Merge with existing children
-        expanded_node["children"] = expanded_node.get("children", []) + substeps
-    
-    return expanded_node
-
-def update_tree_at_path(tree, path, new_node):
-    """Update the tree by replacing a node at the given path."""
-    if not path:  # We're updating the root node
-        return new_node
-    
-    # Create a deep copy of the tree to avoid modifying the original
-    updated_tree = json.loads(json.dumps(tree))
-    
-    # Navigate to the parent of the target node
-    current = updated_tree
-    for i in range(len(path) - 1):
-        index = path[i]
-        if "children" not in current or index >= len(current["children"]):
-            # Path is invalid, return original tree
-            return tree
-        current = current["children"][index]
-    
-    # Replace the target node with the new node
-    last_index = path[-1]
-    if "children" not in current or last_index >= len(current["children"]):
-        # Path is invalid, return original tree
-        return tree
-    
-    current["children"][last_index] = new_node
-    
-    return updated_tree
+    return created_dirs
 
 def parse_path_string(path_str):
     """Convert a path string like '1-0-2' or '4' to a list of integers [1, 0, 2] or [4]."""
@@ -138,23 +168,32 @@ def parse_path_string(path_str):
 
 def handle_expand_node_args():
     """Custom argument handling for expand-node.py to support node path specification."""
-    usage_msg = "Usage: python expand-node.py <input_json> [node_path] [output_json]\nExample: python expand-node.py input.json 1-0-2 output.json"
+    usage_msg = """Usage: python expand-node.py <input_directory> [node_path_or_uuid] [output_metadata_path]
+    
+    <input_directory>: Directory containing the tree structure (e.g., output/hallucinate-tree/uuid)
+    [node_path_or_uuid]: Optional - Path indices (e.g., 1-0-2) or UUID to identify the node to expand
+    [output_metadata_path]: Optional - Path to save expansion metadata
+    
+    Examples:
+      python expand-node.py output/hallucinate-tree/e2dd9b38-ab19-4156-8031-bcb2db5c93a7
+      python expand-node.py output/hallucinate-tree/e2dd9b38-ab19-4156-8031-bcb2db5c93a7 1-0
+      python expand-node.py output/hallucinate-tree/e2dd9b38-ab19-4156-8031-bcb2db5c93a7 e2dd9b38
+    """
     
     if len(sys.argv) < 2 or len(sys.argv) > 4:
         print(usage_msg)
         sys.exit(1)
         
-    input_filepath = sys.argv[1]
-    node_path_str = None
+    input_directory = sys.argv[1]
+    node_specifier = None
     output_filepath = None
     
-    # Process the second argument - could be a node path or output filepath
+    # Process the second argument - could be a node path, UUID, or output filepath
     if len(sys.argv) >= 3:
         arg2 = sys.argv[2]
-        # If it doesn't end with .json and can be parsed as a number or contains dashes
-        # treat it as a node path
-        if not arg2.endswith('.json') and (arg2.replace('-', '').isdigit() or '-' in arg2):
-            node_path_str = arg2
+        # If it doesn't end with .json and looks like a path or UUID, treat as node specifier
+        if not arg2.endswith('.json'):
+            node_specifier = arg2
         else:
             output_filepath = arg2
     
@@ -162,116 +201,100 @@ def handle_expand_node_args():
     if len(sys.argv) >= 4:
         output_filepath = sys.argv[3]
     
-    return input_filepath, node_path_str, output_filepath
+    return input_directory, node_specifier, output_filepath
 
 def main():
     """Main function to run the node expansion routine."""
-    input_filepath, node_path_str, specified_output_filepath = handle_expand_node_args()
+    input_directory, node_specifier, specified_output_filepath = handle_expand_node_args()
     
     print("Working...")
     start_time = datetime.now()
     
-    # Load input data
-    input_data = load_json(input_filepath)
-    
-    # Handle both standard input format and output file format
-    # If the input file is an output file, extract the tree from it
-    if isinstance(input_data, dict) and "tree" in input_data and isinstance(input_data["tree"], dict):
-        tree = input_data["tree"]
-        # Also extract other useful parameters if they exist
-        model = input_data.get("model", "gemma3")
-    else:
-        tree = input_data.get("tree", input_data)
-        model = input_data.get("model", "gemma3")
-    
-    # Normalize the tree specifically for expansion
-    tree = normalize_tree_for_expansion(tree)
-    
-    # Get node path from command line or input data
-    node_path = None
-    if node_path_str:
-        node_path = parse_path_string(node_path_str)
-    else:
-        node_path = input_data.get("node_path", [])
-    
-    node_step = input_data.get("node_step", None)
-    
-    # Extract parameters from input if available
-    parameters = input_data.get("parameters", {})
-    depth = input_data.get("depth", 1)
-    replace_existing = input_data.get("replace_existing", True)
-    num_substeps = input_data.get("num_substeps", None)
-    
-    # Find the node to expand
-    target_node = None
-    node_path_in_tree = []
-    
-    # If no node is specified or not found by path_str, try to handle gracefully
-    if node_path:
-        print(f"Searching for node at path: {node_path}")
-        target_node, node_path_in_tree = find_node_by_path(tree, node_path)
-        
-        # Debug info if node not found
-        if not target_node:
-            print(f"WARNING: Node at path {node_path} not found.")
-            print(f"Available paths at root level: 0 to {len(tree.get('children', [])) - 1}")
-    elif node_step:
-        print(f"Searching for node with text: '{node_step}'")
-        target_node, node_path_in_tree = find_node_by_step_text(tree, node_step)
-    else:
-        # If no node is specified, default to expanding the root node
-        print("No node specified, expanding the root node.")
-        target_node, node_path_in_tree = tree, []
-        
-        # Alternative: Let the user choose a node interactively
-        # print_tree_nodes(tree)
-        # node_choice = input("Enter the number of the node to expand: ")
-        # ...
-    
-    if not target_node:
-        print(f"Error: Could not find the specified node in the tree.")
+    # Check if the input directory exists
+    if not os.path.isdir(input_directory):
+        print(f"Error: Input directory '{input_directory}' does not exist.")
         sys.exit(1)
     
-    print(f"Expanding node: '{target_node.get('step', 'Unknown')}'")
+    # Try to read metadata for model information if available
+    metadata_path = os.path.join(input_directory, "metadata.json")
+    model = "gemma3"  # Default model
+    parameters = {}
+    
+    if os.path.exists(metadata_path):
+        try:
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+                if "model" in metadata:
+                    model = metadata["model"]
+                if "parameters" in metadata:
+                    parameters = metadata["parameters"]
+        except json.JSONDecodeError:
+            print("Warning: Could not parse metadata.json, using default model settings.")
+    
+    # Find the target node
+    target_node = None
+    node_dir = None
+    
+    if node_specifier:
+        # Check if the specifier is a path (contains only digits and dashes)
+        if re.match(r'^[\d-]+$', node_specifier):
+            path_indices = parse_path_string(node_specifier)
+            print(f"Searching for node at path indices: {path_indices}")
+            target_node, node_dir = find_node_by_path(input_directory, path_indices)
+        else:
+            # Assume it's a UUID or part of one
+            print(f"Searching for node with UUID containing: {node_specifier}")
+            target_node, node_dir = find_node_by_uuid(node_specifier, input_directory)
+    else:
+        # Default to root node
+        print("No node specified, using root node.")
+        target_node, node_dir = find_node_by_path(input_directory, [])
+    
+    if target_node is None or node_dir is None:
+        print(f"Error: Could not find the specified node.")
+        sys.exit(1)
     
     # Expand the node
-    expanded_node = expand_node(
-        target_node, 
-        model, 
-        parameters, 
-        depth, 
-        replace_existing,
-        num_substeps
+    expanded_dirs = expand_node_in_filesystem(
+        target_node,
+        node_dir,
+        model,
+        parameters
     )
     
-    # Update the tree with the expanded node
-    updated_tree = update_tree_at_path(tree, node_path_in_tree, expanded_node)
-    
-    # Get output filepath and UUID
+    # Get output filepath and UUID for metadata
     output_filepath, output_uuid = get_output_filepath(
         "expand-node",
         specified_path=specified_output_filepath
     )
     
-    # Create metadata
+    # Create metadata for this expansion
     metadata = create_output_metadata("Node Expansion", start_time, output_uuid)
     
-    # Combine metadata with the updated tree
+    # Add details about the expansion to metadata
+    expanded_node_info = []
+    for dir_info in expanded_dirs:
+        expanded_node_info.append({
+            "step": dir_info["data"]["step"],
+            "uuid": dir_info["data"]["uuid"],
+            "directory": dir_info["directory"]
+        })
+    
+    # Combine metadata with expansion information
     output_data = {
         **metadata,
-        "tree": updated_tree,
-        "expanded_node_path": node_path_in_tree,
-        "expanded_node_step": target_node.get("step", "")
+        "expanded_node": {
+            "step": target_node["step"],
+            "uuid": target_node["uuid"],
+            "directory": node_dir
+        },
+        "new_nodes": expanded_node_info,
+        "num_substeps_created": len(expanded_dirs)
     }
     
-    # Double-check output_filepath is valid before trying to save
-    if not output_filepath:
-        output_filepath = f"output/expand-node/{uuid.uuid4()}.json"
-        os.makedirs(os.path.dirname(output_filepath), exist_ok=True)
-        print(f"Using default output filepath: {output_filepath}")
-    
     save_output(output_data, output_filepath)
-    print(f"Node expanded, updated tree saved to {output_filepath}")
+    print(f"Node expanded with {len(expanded_dirs)} substeps")
+    print(f"Expansion metadata saved to {output_filepath}")
 
 if __name__ == "__main__":
     main()

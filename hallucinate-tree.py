@@ -2,11 +2,68 @@ import os
 import json
 import sys
 import uuid
+import re
 from datetime import datetime
 from utils import (
     load_json, save_output, chat_with_llm, parse_llm_json_response,
     create_output_metadata, get_output_filepath, handle_command_args
 )
+
+def sanitize_filename(name):
+    """Convert a step name to a valid directory name using lowercase and underscores."""
+    # Convert to lowercase
+    sanitized = name.lower()
+    # Remove invalid characters and replace spaces/hyphens with underscores
+    sanitized = re.sub(r'[^\w\s-]', '', sanitized)
+    sanitized = re.sub(r'[\s-]+', '_', sanitized)
+    # Ensure it's not too long
+    return sanitized[:40]  # Shortened to leave room for the UUID
+
+def save_tree_to_filesystem(tree, base_path, parent_uuid=None):
+    """Save a tree structure to the filesystem where each node is a directory."""
+    # Create the base directory if it doesn't exist
+    os.makedirs(base_path, exist_ok=True)
+    
+    # Generate UUID for this node if it doesn't have one
+    if "uuid" not in tree:
+        tree["uuid"] = str(uuid.uuid4())
+    
+    # Save the node's details as node.json
+    node_details = {
+        "step": tree["step"],
+        "uuid": tree["uuid"]
+    }
+    
+    # Add parent UUID reference if this isn't the root node
+    if parent_uuid:
+        node_details["parent_uuid"] = parent_uuid
+    
+    with open(os.path.join(base_path, "node.json"), "w", encoding="utf-8") as f:
+        json.dump(node_details, f, indent=4)
+    
+    # Create child directories for each child node
+    for child in tree.get("children", []):
+        # Generate UUID for the child if it doesn't have one
+        if "uuid" not in child:
+            child["uuid"] = str(uuid.uuid4())
+        
+        # Create directory name: sanitized_name_uuid
+        child_name = sanitize_filename(child["step"])
+        
+        # If sanitizing results in an empty string, use a generic name
+        if not child_name:
+            child_name = "step"
+            
+        # Use full UUID in directory name
+        dir_name = f"{child_name}_{child['uuid']}"
+        
+        # Create child directory
+        child_path = os.path.join(base_path, dir_name)
+        
+        # Pass the current node's UUID as the parent UUID for the child
+        save_tree_to_filesystem(child, child_path, tree["uuid"])
+    
+    return base_path
 
 def generate_task_tree(input_data):
     """Generate a structured task tree using AI hallucinations."""
@@ -61,14 +118,16 @@ def generate_task_tree(input_data):
             return {"step": step, "children": [{"step": response_text, "children": []}]}
 
     tree = expand_step(task, 0)
+    # Generate UUID for root node
+    tree["uuid"] = str(uuid.uuid4())
     return tree
 
 def main():
     """Main function to run the hallucination-based tree generation."""
-    usage_msg = "Usage: python hallucinate-tree.py <input_json> [output_json]"
+    usage_msg = "Usage: python hallucinate-tree.py <input_json> [output_dir]"
     
     # Use handle_command_args utility
-    input_filepath, specified_output_filepath = handle_command_args(usage_msg)
+    input_filepath, specified_output_path = handle_command_args(usage_msg)
 
     print("Working...")
     start_time = datetime.now()
@@ -76,23 +135,29 @@ def main():
     input_data = load_json(input_filepath)
     tree_content = generate_task_tree(input_data)
     
-    print("RESPONSE: " + str(tree_content))
+    # Generate a UUID for this tree
+    tree_uuid = tree_content["uuid"]
     
-    # Use get_output_filepath and create_output_metadata utilities
-    output_filepath, output_uuid = get_output_filepath(
-        "hallucinate-tree", 
-        specified_path=specified_output_filepath
-    )
+    # Define the base output directory
+    if specified_output_path:
+        # If output path is specified, use that
+        base_output_dir = specified_output_path
+    else:
+        # Otherwise create a directory with the UUID in the default location
+        base_output_dir = os.path.join("output", "hallucinate-tree", tree_uuid)
     
-    metadata = create_output_metadata("Hallucinate Tree", start_time, output_uuid)
+    # Create the base output directory if it doesn't exist
+    os.makedirs(base_output_dir, exist_ok=True)
     
-    # Combine metadata and tree into output data
-    output_data = {**metadata, "tree": tree_content}
+    # Save metadata to the base directory
+    metadata = create_output_metadata("Hallucinate Tree", start_time, tree_uuid)
+    with open(os.path.join(base_output_dir, "metadata.json"), "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=4)
     
-    # Save output using utility
-    save_output(output_data, output_filepath)
+    # Save the tree structure to the filesystem
+    tree_root_dir = save_tree_to_filesystem(tree_content, base_output_dir)
     
-    print(f"Generated initial tree, output saved to {output_filepath}")
+    print(f"Generated initial tree, output saved to {tree_root_dir}")
 
 if __name__ == "__main__":
     main()
