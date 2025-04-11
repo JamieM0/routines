@@ -71,6 +71,23 @@ def save_tree_to_filesystem(tree, base_path, parent_uuid=None):
     
     return base_path
 
+def save_tree_as_flat_json(tree, metadata, output_path):
+    """Save the tree structure and metadata as a single JSON file."""
+    # Combine tree and metadata into a single structure
+    output_data = {
+        "metadata": metadata,
+        "tree": tree
+    }
+    
+    # Ensure the output directory exists
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    # Save the combined data to a single JSON file
+    with open(output_path+".json", "w", encoding="utf-8") as f:
+        json.dump(output_data, f, indent=4)
+    
+    return output_path
+
 def generate_task_tree(input_data):
     """Generate a structured task tree using AI hallucinations."""
     task = input_data.get("task", "Unknown Task")
@@ -130,9 +147,16 @@ def generate_task_tree(input_data):
 
 def main():
     """Main function to run the hallucination-based tree generation."""
-    usage_msg = "Usage: python hallucinate-tree.py <input_json> [output_dir]"
+    usage_msg = "Usage: python hallucinate-tree.py <input_json> [output_dir] [-flat]"
     
-    # Use handle_command_args utility
+    # Use handle_command_args utility and check for -flat flag
+    args = sys.argv[1:]
+    flat_output = "-flat" in args
+    if flat_output:
+        args.remove("-flat")
+    
+    # Update to pass the remaining args to handle_command_args
+    sys.argv = [sys.argv[0]] + args
     input_filepath, specified_output_path = handle_command_args(usage_msg)
 
     print("Working...")
@@ -144,6 +168,9 @@ def main():
     # Generate a UUID for this tree
     tree_uuid = tree_content["uuid"]
     
+    # Create metadata
+    metadata = create_output_metadata("Hallucinate Tree", start_time, tree_uuid)
+    
     # Define the base output directory
     if specified_output_path:
         # If output path is specified, use that
@@ -152,18 +179,34 @@ def main():
         # Otherwise create a directory with the UUID in the default location
         base_output_dir = os.path.join("output", "hallucinate-tree", tree_uuid)
     
-    # Create the base output directory if it doesn't exist
-    os.makedirs(base_output_dir, exist_ok=True)
-    
-    # Save metadata to the base directory
-    metadata = create_output_metadata("Hallucinate Tree", start_time, tree_uuid)
-    with open(os.path.join(base_output_dir, "metadata.json"), "w", encoding="utf-8") as f:
-        json.dump(metadata, f, indent=4)
-    
-    # Save the tree structure to the filesystem
-    tree_root_dir = save_tree_to_filesystem(tree_content, base_output_dir)
-    
-    print(f"Generated initial tree, output saved to {tree_root_dir}")
+    if flat_output:
+        # Save as a single JSON file if -flat flag is provided
+        if os.path.isdir(base_output_dir):
+            # If base_output_dir is a directory, create a file in that directory
+            output_filepath = os.path.join(base_output_dir, f"{tree_uuid}.json")
+        else:
+            # If base_output_dir includes a filename, use it directly
+            output_filepath = base_output_dir
+            
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname(output_filepath), exist_ok=True)
+        
+        # Save as flat JSON
+        output_path = save_tree_as_flat_json(tree_content, metadata, output_filepath)
+        print(f"Generated tree as flat JSON, output saved to {output_path}")
+    else:
+        # Original behavior: save as directory structure
+        # Create the base output directory if it doesn't exist
+        os.makedirs(base_output_dir, exist_ok=True)
+        
+        # Save metadata to the base directory
+        with open(os.path.join(base_output_dir, "metadata.json"), "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=4)
+        
+        # Save the tree structure to the filesystem
+        tree_root_dir = save_tree_to_filesystem(tree_content, base_output_dir)
+        
+        print(f"Generated initial tree, output saved to {tree_root_dir}")
 
 if __name__ == "__main__":
     main()
