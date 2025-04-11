@@ -26,7 +26,7 @@ def generate_summary(input_data):
     user_msg = f"Summarize the following text:\n\n{text}"
     
     # Use chat_with_llm instead of direct ollama.chat
-    summary = chat_with_llm(model, system_msg, user_msg, parameters)
+    summary = chat_with_llm(model, systemMsg, user_msg, parameters)
     
     return summary
 
