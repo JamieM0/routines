@@ -90,7 +90,7 @@ def save_tree_as_flat_json(tree, metadata, output_path):
 
 def generate_task_tree(input_data):
     """Generate a structured task tree using AI hallucinations."""
-    task = input_data.get("task", "Unknown Task")
+    task = input_data.get("topic", "Unknown Task")
     depth = input_data.get("depth", 2)  # Default depth of 2
     model = input_data.get("model", "gemma3")
     parameters = input_data.get("parameters", {})

@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 from pathlib import Path
 
 def read_json_file(file_path):
@@ -17,21 +18,32 @@ def generate_automation_timeline_html(timeline_data):
         html += f'    <div class="timeline-entry">\n'
         html += f'        <div class="timeline-year">{year}</div>\n'
         html += f'        <div class="timeline-content">\n'
+        # Check for and process bold text (** pattern)
+        content = process_bold_text(content)
         html += f'            <p>{content}</p>\n'
         html += f'        </div>\n'
         html += f'    </div>\n'
 
-    # Predictions timeline entries
+    # Predictions timeline entries - with teal color for years and italics for content
     for year, content in timeline_data['timeline']['predictions'].items():
         html += f'    <div class="timeline-entry">\n'
-        html += f'        <div class="timeline-year">{year}</div>\n'
+        html += f'        <div class="timeline-year" style="color: teal;">{year}</div>\n'
         html += f'        <div class="timeline-content">\n'
-        html += f'            <p>{content}</p>\n'
+        # Check for and process bold text (** pattern)
+        content = process_bold_text(content)
+        # Add italics to the prediction text
+        html += f'            <p><em>{content}</em></p>\n'
         html += f'        </div>\n'
         html += f'    </div>\n'
 
     html += '</div>\n'
     return html
+
+def process_bold_text(text):
+    """Replace text surrounded by ** with HTML bold tags."""
+    import re
+    # Find all text surrounded by ** and replace with <strong> tags
+    return re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', text)
 
 def generate_automation_challenges_html(challenges_data):
     """Generate HTML for the automation challenges section."""
@@ -199,14 +211,33 @@ def generate_technical_details_html(future_tech_data, specs_data):
     html += '        <h4>Performance Metrics</h4>\n'
     html += '        <ul class="step-list">\n'
     for metric in specs_data["performance_metrics"]:
-        html += f'            <li>{metric["name"]}: {metric["value"]} (Range: {metric["range"]})</li>\n'
+        # Handle various possible structures for the range information
+        range_info = ""
+        if "range" in metric:
+            range_info = f" (Range: {metric['range']})"
+        elif "description" in metric:
+            # If no range field but description exists, include the description instead
+            range_info = f" - {metric['description']}"
+            
+        html += f'            <li>{metric["name"]}: {metric["value"]}{range_info}</li>\n'
     html += '        </ul>\n'
 
     # Implementation Requirements
     html += '        <h4>Implementation Requirements</h4>\n'
     html += '        <ul class="step-list">\n'
     for req in specs_data["implementation_requirements"]:
-        html += f'            <li>{req["name"]}: {req["specification"]}</li>\n'
+        # Handle different field names for specification
+        spec_info = ""
+        if "specification" in req:
+            spec_info = req["specification"]
+        elif "value" in req:
+            spec_info = req["value"]
+        elif "description" in req:
+            spec_info = req["description"]
+        else:
+            spec_info = "Specification not available"
+            
+        html += f'            <li>{req["name"]}: {spec_info}</li>\n'
     html += '        </ul>\n'
     html += '    </div>\n'
 
@@ -331,8 +362,34 @@ def generate_competing_approaches_html():
 
     return html
 
+def generate_breadcrumbs_html(breadcrumbs):
+    """Generate HTML for customized breadcrumbs navigation."""
+    if not breadcrumbs:
+        return None
+        
+    # Split the breadcrumbs by '/'
+    parts = breadcrumbs.split('/')
+    
+    # Generate HTML for breadcrumbs
+    html = '<div class="breadcrumbs">\n'
+    html += '    <span><a href="/index">Home</a></span>\n'
+    
+    # Build the path incrementally for each part
+    path = ""
+    for i, part in enumerate(parts[:-1]):  # All but the last part (current page)
+        path += f"/{part}"
+        display_name = part.replace('-', ' ').title()
+        html += f'    <span><a href="{path}/index">{display_name}</a></span>\n'
+    
+    # Add the current page (last part) without a link
+    current_page = parts[-1].replace('-', ' ').title()
+    html += f'    <span>{current_page}</span>\n'
+    html += '</div>\n'
+    
+    return html
+
 def generate_page_html(template_html, metadata, tree_data, timeline_data, challenges_data,
-                       adoption_data, implementation_data, roi_data, future_tech_data, specs_data):
+                       adoption_data, implementation_data, roi_data, future_tech_data, specs_data, breadcrumbs):
     """Generate the complete HTML page using the template and JSON data."""
     # Replace title, subtitle, and status
     new_html = template_html.replace('Bread Making', metadata['page_metadata']['title'])
@@ -346,7 +403,16 @@ def generate_page_html(template_html, metadata, tree_data, timeline_data, challe
     )
 
     # Replace progress bar (assuming 50% for partial automation, adjust as needed)
-    progress_percentage = int(metadata['page_metadata']['automation_progress'].strip('%'))
+    # Check if progress is in automation_progress or progress_percentage field
+    if 'automation_progress' in metadata['page_metadata']:
+        progress_text = metadata['page_metadata']['automation_progress']
+    elif 'progress_percentage' in metadata['page_metadata']:
+        progress_text = metadata['page_metadata']['progress_percentage']
+    else:
+        progress_text = "50%"  # Default fallback
+        
+    # Remove any non-digit characters and convert to integer
+    progress_percentage = int(''.join(filter(str.isdigit, progress_text)))
     progress_style = f'style="width: {progress_percentage}%;"'
     new_html = new_html.replace('<div class="progress-fill"></div>', f'<div class="progress-fill" {progress_style}></div>')
 
@@ -432,63 +498,115 @@ def generate_page_html(template_html, metadata, tree_data, timeline_data, challe
     new_html = new_html[:tab_content_start] + tab_content + new_html[tab_content_end:]
 
     # Update breadcrumb
-    new_html = new_html.replace('<span><a href="/food-production/baking/index">Baking</a></span>',
-                               '<span><a href="/transportation/autonomous-vehicles/index">Transportation</a></span>')
+    if breadcrumbs:
+        breadcrumbs_html = generate_breadcrumbs_html(breadcrumbs)
+        new_html = new_html.replace('<span><a href="/food-production/baking/index">Baking</a></span>', breadcrumbs_html)
 
     return new_html
 
 def main():
-    # Define paths to JSON files
-    templates_dir = "templates"
-    metadata_path = os.path.join(templates_dir, "1. metadata.json")
-    tree_path = os.path.join(templates_dir, "2. tree.json")
-    timeline_path = os.path.join(templates_dir, "3. timeline.json")
-    challenges_path = os.path.join(templates_dir, "4. challenges.json")
-    adoption_path = os.path.join(templates_dir, "5. automation adoption.json")
-    implementation_path = os.path.join(templates_dir, "6. current implementations.json")
-    roi_path = os.path.join(templates_dir, "7. ROI analysis.json")
-    future_tech_path = os.path.join(templates_dir, "8. Future Technology.json")
-    specs_path = os.path.join(templates_dir, "9. Specifications Industrial.json")
-
+    """Main function to generate HTML based on JSON files."""
+    usage_msg = "Usage: python assemble.py <flow_dir> [output_path] [breadcrumbs]"
+    
+    if len(sys.argv) < 2:
+        print(usage_msg)
+        sys.exit(1)
+        
+    flow_dir = sys.argv[1]
+    output_path = sys.argv[2] if len(sys.argv) > 2 else None
+    breadcrumbs = sys.argv[3] if len(sys.argv) > 3 else None
+    
+    # Check if breadcrumbs file exists in the flow directory and use it if no breadcrumbs provided
+    breadcrumbs_file = os.path.join(flow_dir, "breadcrumbs.txt")
+    if not breadcrumbs and os.path.exists(breadcrumbs_file):
+        with open(breadcrumbs_file, "r", encoding="utf-8") as f:
+            breadcrumbs = f.read().strip()
+    
+    # Check if the flow directory exists
+    if not os.path.isdir(flow_dir):
+        print(f"Error: Flow directory '{flow_dir}' not found")
+        sys.exit(1)
+    
+    # Define paths to JSON files in the flow directory
+    metadata_path = os.path.join(flow_dir, "1.json")
+    tree_path = os.path.join(flow_dir, "2.json")
+    timeline_path = os.path.join(flow_dir, "3.json")
+    challenges_path = os.path.join(flow_dir, "4.json")
+    adoption_path = os.path.join(flow_dir, "5.json")
+    implementation_path = os.path.join(flow_dir, "6.json")
+    roi_path = os.path.join(flow_dir, "7.json")
+    future_tech_path = os.path.join(flow_dir, "8.json")
+    specs_path = os.path.join(flow_dir, "9.json")
+    
+    # Path to the template HTML
+    template_path = os.path.join("flow", "template.html")
+    
+    # If template doesn't exist in the specified location, try a relative path
+    if not os.path.exists(template_path):
+        template_path = "template.html"
+        
+        # If that doesn't exist either, check if it exists in the flow directory
+        if not os.path.exists(template_path):
+            template_path = os.path.join(flow_dir, "..", "template.html")
+    
     # Read template HTML
-    with open("templates/breadmaking.html", "r", encoding="utf-8") as f:
-        template_html = f.read()
+    try:
+        with open(template_path, "r", encoding="utf-8") as f:
+            template_html = f.read()
+    except FileNotFoundError:
+        print(f"Error: Template HTML file not found at '{template_path}'")
+        sys.exit(1)
+    
+    try:
+        # Read JSON data
+        metadata = read_json_file(metadata_path)
+        tree_data = read_json_file(tree_path)
+        timeline_data = read_json_file(timeline_path)
+        challenges_data = read_json_file(challenges_path)
+        adoption_data = read_json_file(adoption_path)["automation_adoption"]
+        implementation_data = read_json_file(implementation_path)
+        roi_data = read_json_file(roi_path)["roi_analysis"]
+        future_tech_data = read_json_file(future_tech_path)["future_technology"]
+        specs_data = read_json_file(specs_path)["industrial_specifications"]
 
-    # Read JSON data
-    metadata = read_json_file(metadata_path)
-    tree_data = read_json_file(tree_path)
-    timeline_data = read_json_file(timeline_path)
-    challenges_data = read_json_file(challenges_path)
-    adoption_data = read_json_file(adoption_path)["automation_adoption"]
-    implementation_data = read_json_file(implementation_path)
-    roi_data = read_json_file(roi_path)["roi_analysis"]
-    future_tech_data = read_json_file(future_tech_path)["future_technology"]
-    specs_data = read_json_file(specs_path)["industrial_specifications"]
+        # Generate new HTML page
+        new_html = generate_page_html(
+            template_html,
+            metadata,
+            tree_data,
+            timeline_data,
+            challenges_data,
+            adoption_data,
+            implementation_data,
+            roi_data,
+            future_tech_data,
+            specs_data,
+            breadcrumbs
+        )
 
-    # Generate new HTML page
-    new_html = generate_page_html(
-        template_html,
-        metadata,
-        tree_data,
-        timeline_data,
-        challenges_data,
-        adoption_data,
-        implementation_data,
-        roi_data,
-        future_tech_data,
-        specs_data
-    )
+        # Determine output path
+        if output_path is None:
+            # Save to the flow directory by default
+            output_path = os.path.join(flow_dir, "output.html")
+        
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-    # Create output directory if it doesn't exist
-    output_dir = "output"
-    Path(output_dir).mkdir(exist_ok=True)
+        # Write the generated HTML to a file
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(new_html)
 
-    # Write the generated HTML to a file
-    output_file = os.path.join(output_dir, f"{metadata['page_metadata']['title'].lower().replace(' ', '_')}.html")
-    with open(output_file, "w", encoding="utf-8") as f:
-        f.write(new_html)
-
-    print(f"Generated HTML page: {output_file}")
+        print(f"Generated HTML page: {os.path.abspath(output_path)}")
+        
+    except FileNotFoundError as e:
+        print(f"Error: Missing required JSON file: {e}")
+        sys.exit(1)
+    except KeyError as e:
+        print(f"Error: Invalid JSON structure: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error generating HTML: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
