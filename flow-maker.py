@@ -105,6 +105,56 @@ def main():
         if not success:
             print(f"Warning: {program} failed to complete successfully")
     
+    # Generate alternative trees if specified in the input
+    num_alternatives = input_data.get("alternatives", 0)
+    if num_alternatives > 0:
+        print(f"\nGenerating {num_alternatives} alternative trees...")
+        
+        # Create variations of the input with different model parameters for diversity
+        alternative_inputs = []
+        for i in range(num_alternatives):
+            alt_input = input_data.copy()
+            
+            # Modify parameters to create diversity in the alternatives
+            if "parameters" not in alt_input:
+                alt_input["parameters"] = {}
+            
+            # Different temperature for each alternative to produce variations
+            alt_input["parameters"]["temperature"] = 0.3 + (i * 0.15)  # 0.3, 0.45, 0.6, etc.
+            
+            # Different name/title for each approach
+            if i == 0:
+                alt_input["approach_name"] = "Efficiency-Optimized Approach"
+                alt_input["approach_description"] = "This approach prioritizes minimizing resource usage and production time."
+            elif i == 1:
+                alt_input["approach_name"] = "Safety-Optimized Approach"
+                alt_input["approach_description"] = "This approach focuses on maximizing safety and reliability."
+            elif i == 2:
+                alt_input["approach_name"] = "Hybridized Approach"
+                alt_input["approach_description"] = "This approach balances efficiency with safety considerations."
+            else:
+                alt_input["approach_name"] = f"Alternative Approach {i+1}"
+                alt_input["approach_description"] = f"An alternative methodology for approaching this process."
+            
+            alternative_inputs.append(alt_input)
+        
+        # Generate each alternative tree
+        for i, alt_input in enumerate(alternative_inputs):
+            alt_input_path = os.path.join(flow_dir, f"alt_input_{i+1}.json")
+            alt_output_path = os.path.join(flow_dir, f"alt{i+1}.json")
+            
+            # Save the alternative input
+            with open(alt_input_path, "w", encoding="utf-8") as f:
+                json.dump(alt_input, f, indent=4)
+            
+            # Run hallucinate-tree.py with the alternative input
+            alt_success = run_program("hallucinate-tree.py", alt_input_path, alt_output_path, ["-flat"])
+            
+            if alt_success:
+                print(f"  Alternative tree {i+1} generated successfully at {alt_output_path}")
+            else:
+                print(f"  Warning: Failed to generate alternative tree {i+1}")
+    
     # Create flow metadata
     end_time = datetime.now()
     time_taken = end_time - start_time

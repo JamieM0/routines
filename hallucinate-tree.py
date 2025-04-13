@@ -174,7 +174,7 @@ def main():
     # Define the base output directory
     if specified_output_path:
         # If output path is specified, use that
-        base_output_dir = specified_output_path
+        base_output_dir = specified_output_path.rstrip(".json")
     else:
         # Otherwise create a directory with the UUID in the default location
         base_output_dir = os.path.join("output", "hallucinate-tree", tree_uuid)

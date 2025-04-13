@@ -24,10 +24,10 @@ def generate_automation_timeline_html(timeline_data):
         html += f'        </div>\n'
         html += f'    </div>\n'
 
-    # Predictions timeline entries - with teal color for years and italics for content
+    # Predictions timeline entries - with teal color for year background and italics for content
     for year, content in timeline_data['timeline']['predictions'].items():
         html += f'    <div class="timeline-entry">\n'
-        html += f'        <div class="timeline-year" style="color: teal;">{year}</div>\n'
+        html += f'        <div class="timeline-year-prediction">{year}</div>\n'
         html += f'        <div class="timeline-content">\n'
         # Check for and process bold text (** pattern)
         content = process_bold_text(content)
@@ -49,7 +49,12 @@ def generate_automation_challenges_html(challenges_data):
     """Generate HTML for the automation challenges section."""
     html = '<div class="automation-challenges">\n'
     html += f'    <h3>Current Automation Challenges</h3>\n'
-    html += f'    <p>Despite significant progress, several challenges remain in fully automating the {challenges_data["challenges"]["topic"].split()[0].lower()} process:</p>\n'
+    if "topic" in challenges_data["challenges"]:
+        html += f'    <p>Despite significant progress, several challenges remain in fully automating the {challenges_data["challenges"]["topic"].split()[0].lower()} process:</p>\n'
+    elif "field" in challenges_data["challenges"]:
+        html += f'    <p>Despite significant progress, several challenges remain in fully automating the {challenges_data["challenges"]["field"].split()[0].lower()} process:</p>\n'
+    else:
+        html += '    <p>Despite significant progress, several challenges remain in fully automating the process:</p>\n'
     html += f'    <ul>\n'
 
     for challenge in challenges_data['challenges']['challenges']:
@@ -104,9 +109,14 @@ def generate_automation_pathway_html(adoption_data, implementation_data, roi_dat
     phase_keys = sorted([k for k in adoption_data.keys() if k.startswith('phase')])
     for phase_key in phase_keys:
         phase = adoption_data[phase_key]
-        html += f'        <h4>{phase["title"]} ({phase["status"]})</h4>\n'
+        # Process bold text in the title
+        title = process_bold_text(phase["title"])
+        status = process_bold_text(phase["status"])
+        html += f'        <h4>{title} ({status})</h4>\n'
         html += '        <ul class="step-list">\n'
         for example in phase["examples"]:
+            # Process bold text in each example
+            example = process_bold_text(example)
             html += f'            <li>{example}</li>\n'
         html += '        </ul>\n'
 
@@ -129,11 +139,17 @@ def generate_automation_pathway_html(adoption_data, implementation_data, roi_dat
 
     # Correctly access the implementation data
     for step in implementation_data["implementation_assessment"]["process_steps"]:
+        # Process bold text in each cell
+        step_name = process_bold_text(step["step_name"])
+        low_scale = process_bold_text(step["automation_levels"]["low_scale"])
+        medium_scale = process_bold_text(step["automation_levels"]["medium_scale"])
+        high_scale = process_bold_text(step["automation_levels"]["high_scale"])
+        
         html += '                <tr>\n'
-        html += f'                    <td>{step["step_name"]}</td>\n'
-        html += f'                    <td>{step["automation_levels"]["low_scale"]}</td>\n'
-        html += f'                    <td>{step["automation_levels"]["medium_scale"]}</td>\n'
-        html += f'                    <td>{step["automation_levels"]["high_scale"]}</td>\n'
+        html += f'                    <td>{step_name}</td>\n'
+        html += f'                    <td>{low_scale}</td>\n'
+        html += f'                    <td>{medium_scale}</td>\n'
+        html += f'                    <td>{high_scale}</td>\n'
         html += '                </tr>\n'
 
     html += '            </tbody>\n'
@@ -148,17 +164,35 @@ def generate_automation_pathway_html(adoption_data, implementation_data, roi_dat
 
     # Correctly access the nested ROI timeframe data
     for scale in ["small_scale", "medium_scale", "large_scale"]:
-        if scale in roi_data["roi_analysis"]:
-            timeframe = roi_data["roi_analysis"][scale]["timeframe"]
-            scale_display = scale.replace('_', ' ').title()
-            html += f'            <li><strong>{scale_display}:</strong> {timeframe}</li>\n'
+        if "roi_analysis" in roi_data and scale in roi_data["roi_analysis"]:
+            # Make sure timeframe exists and handle different possible structures
+            scale_data = roi_data["roi_analysis"][scale]
+            if isinstance(scale_data, dict) and "timeframe" in scale_data:
+                timeframe = process_bold_text(scale_data["timeframe"])
+                scale_display = scale.replace('_', ' ').title()
+                html += f'            <li><strong>{scale_display}:</strong> {timeframe}</li>\n'
 
     html += '        </ul>\n'
 
-    # Key benefits section unchanged
+    # Key benefits section
     if "key_benefits" in roi_data:
-        html += '        <p>Key benefits driving ROI include ' + ', '.join(roi_data["key_benefits"][:-1]) + ', and ' + \
-                roi_data["key_benefits"][-1] + '.</p>\n'
+        # Check if key_benefits is a list or a string
+        if isinstance(roi_data["key_benefits"], list):
+            if len(roi_data["key_benefits"]) > 0:
+                # Handle case where key_benefits is a list
+                # Process bold text in each benefit
+                processed_benefits = [process_bold_text(benefit) for benefit in roi_data["key_benefits"]]
+                
+                html += '        <p>Key benefits driving ROI include '
+                if len(processed_benefits) == 1:
+                    html += f'{processed_benefits[0]}.</p>\n'
+                else:
+                    html += ', '.join(processed_benefits[:-1]) + ', and ' + \
+                            processed_benefits[-1] + '.</p>\n'
+        elif isinstance(roi_data["key_benefits"], str):
+            # Handle case where key_benefits is a string
+            processed_benefit = process_bold_text(roi_data["key_benefits"])
+            html += f'        <p>Key benefits driving ROI include {processed_benefit}.</p>\n'
 
     html += '    </div>\n'
     html += '</div>\n'
@@ -177,28 +211,36 @@ def generate_technical_details_html(future_tech_data, specs_data):
     html += '        <h4>Sensory Systems</h4>\n'
     html += '        <ul class="step-list">\n'
     for sensor in future_tech_data["sensory_systems"]:
-        html += f'            <li><strong>{sensor["name"]}:</strong> {sensor["description"]}</li>\n'
+        name = process_bold_text(sensor["name"])
+        description = process_bold_text(sensor["description"])
+        html += f'            <li><strong>{name}:</strong> {description}</li>\n'
     html += '        </ul>\n'
 
     # Control Systems
     html += '        <h4>Control Systems</h4>\n'
     html += '        <ul class="step-list">\n'
     for control in future_tech_data["control_systems"]:
-        html += f'            <li><strong>{control["name"]}:</strong> {control["description"]}</li>\n'
+        name = process_bold_text(control["name"])
+        description = process_bold_text(control["description"])
+        html += f'            <li><strong>{name}:</strong> {description}</li>\n'
     html += '        </ul>\n'
 
     # Mechanical Systems
     html += '        <h4>Mechanical Systems</h4>\n'
     html += '        <ul class="step-list">\n'
     for mech in future_tech_data["mechanical_systems"]:
-        html += f'            <li><strong>{mech["name"]}:</strong> {mech["description"]}</li>\n'
+        name = process_bold_text(mech["name"])
+        description = process_bold_text(mech["description"])
+        html += f'            <li><strong>{name}:</strong> {description}</li>\n'
     html += '        </ul>\n'
 
     # Software Integration
     html += '        <h4>Software Integration</h4>\n'
     html += '        <ul class="step-list">\n'
     for software in future_tech_data["software_integration"]:
-        html += f'            <li><strong>{software["name"]}:</strong> {software["description"]}</li>\n'
+        name = process_bold_text(software["name"])
+        description = process_bold_text(software["description"])
+        html += f'            <li><strong>{name}:</strong> {description}</li>\n'
     html += '        </ul>\n'
     html += '    </div>\n'
 
@@ -211,40 +253,107 @@ def generate_technical_details_html(future_tech_data, specs_data):
     html += '        <h4>Performance Metrics</h4>\n'
     html += '        <ul class="step-list">\n'
     for metric in specs_data["performance_metrics"]:
+        # Process name and value with bold text function
+        name = process_bold_text(metric["name"])
+        value = process_bold_text(metric["value"])
+        
         # Handle various possible structures for the range information
         range_info = ""
         if "range" in metric:
-            range_info = f" (Range: {metric['range']})"
+            range_text = process_bold_text(metric['range'])
+            range_info = f" (Range: {range_text})"
         elif "description" in metric:
             # If no range field but description exists, include the description instead
-            range_info = f" - {metric['description']}"
+            desc_text = process_bold_text(metric['description'])
+            range_info = f" - {desc_text}"
             
-        html += f'            <li>{metric["name"]}: {metric["value"]}{range_info}</li>\n'
+        html += f'            <li>{name}: {value}{range_info}</li>\n'
     html += '        </ul>\n'
 
     # Implementation Requirements
     html += '        <h4>Implementation Requirements</h4>\n'
     html += '        <ul class="step-list">\n'
     for req in specs_data["implementation_requirements"]:
+        # Process name with bold text function
+        name = process_bold_text(req["name"])
+        
         # Handle different field names for specification
         spec_info = ""
         if "specification" in req:
-            spec_info = req["specification"]
+            spec_info = process_bold_text(req["specification"])
         elif "value" in req:
-            spec_info = req["value"]
+            spec_info = process_bold_text(req["value"])
         elif "description" in req:
-            spec_info = req["description"]
+            spec_info = process_bold_text(req["description"])
         else:
             spec_info = "Specification not available"
             
-        html += f'            <li>{req["name"]}: {spec_info}</li>\n'
+        html += f'            <li>{name}: {spec_info}</li>\n'
     html += '        </ul>\n'
     html += '    </div>\n'
 
     html += '</div>\n'
     return html
 
-def generate_competing_approaches_html():
+def generate_tree_preview_text(tree_data):
+    """Generate a text representation of a tree suitable for the approach preview."""
+    # Use the first level (root) and second level (main steps) of the tree for the preview
+    root_name = tree_data.get("tree", {}).get("step", "approach_root").lower().replace(" ", "_")
+    
+    # Start with the root node
+    lines = [root_name]
+    
+    # Add child nodes with ASCII art tree structure
+    children = tree_data.get("tree", {}).get("children", [])
+    for i, child in enumerate(children):
+        # Get a shortened UUID to use in the preview
+        uuid_part = child.get("uuid", "")[:4] if "uuid" in child else str(i)
+        
+        child_step = child.get("step", "step").lower().replace(" ", "_")
+        # Make the child step name and uuid shorter for the preview
+        child_name = f"{child_step}_{uuid_part}"
+        
+        # Last child has a different prefix
+        if i == len(children) - 1:
+            lines.append(f"└── {child_name}")
+        else:
+            lines.append(f"├── {child_name}")
+        
+        # Add grandchildren for this child with proper indentation
+        grandchildren = child.get("children", [])
+        for j, grandchild in enumerate(grandchildren):
+            # Get a shortened UUID for the grandchild
+            g_uuid_part = grandchild.get("uuid", "")[:4] if "uuid" in grandchild else str(j)
+            
+            g_step = grandchild.get("step", "substep").lower().replace(" ", "_")
+            # Make the grandchild step name and uuid shorter for the preview
+            g_name = f"{g_step}_{g_uuid_part}"
+            
+            # Use different prefixes based on whether this is the last child and last grandchild
+            if i == len(children) - 1:  # Last child
+                if j == len(grandchildren) - 1:  # Last grandchild
+                    lines.append(f"    └── {g_name}")
+                else:
+                    lines.append(f"    ├── {g_name}")
+            else:  # Not last child
+                if j == len(grandchildren) - 1:  # Last grandchild
+                    lines.append(f"│   └── {g_name}")
+                else:
+                    lines.append(f"│   ├── {g_name}")
+                    
+            # Limit the preview to a reasonable size
+            if j >= 2 and len(grandchildren) > 4:
+                lines.append(f"│   └── ... ({len(grandchildren) - 3} more steps)")
+                break
+        
+        # Limit the preview to a reasonable number of main steps
+        if i >= 2 and len(children) > 4:
+            lines.append(f"└── ... ({len(children) - 3} more steps)")
+            break
+    
+    return "\n".join(lines)
+
+def generate_competing_approaches_html(alt_trees_data=None):
     """Generate HTML for the competing approaches tab content."""
     html = '<div id="competing-approaches" class="tab-content">\n'
     html += '    <div class="process-section">\n'
@@ -255,95 +364,67 @@ def generate_competing_approaches_html():
     # Approaches grid
     html += '    <div class="approaches-grid">\n'
 
-    # Approach 1
-    html += '        <div class="approach-card">\n'
-    html += '            <h4>Efficiency-Optimized Approach</h4>\n'
-    html += '            <p>This approach prioritizes minimizing resource usage and production time.</p>\n'
-    html += '            <div class="approach-preview">\n'
-    html += 'efficiency_optimized\n'
-    html += '├── sensor_data_collection_8f29\n'
-    html += '│   ├── lidar_scanning_a421\n'
-    html += '│   └── camera_imaging_c731\n'
-    html += '├── data_processing_d54f\n'
-    html += '│   ├── object_detection_b651\n'
-    html += '│   ├── path_planning_e922\n'
-    html += '│   └── decision_making_f110\n'
-    html += '├── control_execution_4a12\n'
-    html += '└── monitoring_feedback_7b29</div>\n'
-    html += '            <div class="approach-meta">\n'
-    html += '                <p>Created by: Iterative AI v2.3</p>\n'
-    html += '                <p>Votes: <span class="vote-count">18</span></p>\n'
-    html += '            </div>\n'
-    html += '            <div class="approach-actions">\n'
-    html += '                <button class="button secondary vote-button">\n'
-    html += '                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\n'
-    html += '                        <path d="M12 4L18 10H6L12 4Z" fill="currentColor"/>\n'
-    html += '                    </svg>\n'
-    html += '                    Vote Up\n'
-    html += '                </button>\n'
-    html += '                <a href="#" class="button secondary">View Full Tree</a>\n'
-    html += '            </div>\n'
-    html += '        </div>\n'
+    # If we have real alternative trees, use them
+    if alt_trees_data and len(alt_trees_data) > 0:
+        for i, alt_tree in enumerate(alt_trees_data):
+            approach_name = alt_tree.get("approach_name", f"Alternative Approach {i+1}")
+            approach_desc = alt_tree.get("approach_description", "An alternative methodology for approaching this process.")
+            
+            # Generate a preview of the tree structure
+            tree_preview = generate_tree_preview_text(alt_tree)
+            
+            # Random-ish vote counts that decrease as index increases
+            vote_count = max(5, 42 - (i * 8) + (i * i))
+            
+            html += f'        <div class="approach-card">\n'
+            html += f'            <h4>{approach_name}</h4>\n'
+            html += f'            <p>{approach_desc}</p>\n'
+            html += f'            <div class="approach-preview">\n{tree_preview}</div>\n'
+            html += '            <div class="approach-meta">\n'
+            html += f'                <p>Created by: Iterative AI Alpha</p>\n'
+            html += f'                <p>Votes: <span class="vote-count">{vote_count}</span></p>\n'
+            html += '            </div>\n'
+            html += '            <div class="approach-actions">\n'
+            html += '                <button class="button secondary vote-button">\n'
+            html += '                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\n'
+            html += '                        <path d="M12 4L18 10H6L12 4Z" fill="currentColor"/>\n'
+            html += '                    </svg>\n'
+            html += '                    Vote Up\n'
+            html += '                </button>\n'
+            html += '                <a href="#" class="button secondary">View Full Tree</a>\n'
+            html += '            </div>\n'
+            html += '        </div>\n'
+    else:
+        # Default placeholders if no alternatives
+        html += '        <div class="approach-card">\n'
+        html += '            <h4>Efficiency-Optimized Approach</h4>\n'
+        html += '            <p>This approach prioritizes minimizing resource usage and production time.</p>\n'
+        html += '            <div class="approach-preview">\n'
+        html += 'efficiency_optimized\n'
+        html += '├── sensor_data_collection_8f29\n'
+        html += '│   ├── lidar_scanning_a421\n'
+        html += '│   └── camera_imaging_c731\n'
+        html += '├── data_processing_d54f\n'
+        html += '│   ├── object_detection_b651\n'
+        html += '│   ├── path_planning_e922\n'
+        html += '│   └── decision_making_f110\n'
+        html += '├── control_execution_4a12\n'
+        html += '└── monitoring_feedback_7b29</div>\n'
+        html += '            <div class="approach-meta">\n'
+        html += '                <p>Created by: Iterative AI v2.3</p>\n'
+        html += '                <p>Votes: <span class="vote-count">18</span></p>\n'
+        html += '            </div>\n'
+        html += '            <div class="approach-actions">\n'
+        html += '                <button class="button secondary vote-button">\n'
+        html += '                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\n'
+        html += '                        <path d="M12 4L18 10H6L12 4Z" fill="currentColor"/>\n'
+        html += '                    </svg>\n'
+        html += '                    Vote Up\n'
+        html += '                </button>\n'
+        html += '                <a href="#" class="button secondary">View Full Tree</a>\n'
+        html += '            </div>\n'
+        html += '        </div>\n'
 
-    # Approach 2
-    html += '        <div class="approach-card">\n'
-    html += '            <h4>Safety-Optimized Approach</h4>\n'
-    html += '            <p>This approach focuses on maximizing safety and reliability.</p>\n'
-    html += '            <div class="approach-preview">\n'
-    html += 'safety_optimized\n'
-    html += '├── redundant_sensing_f721\n'
-    html += '│   ├── primary_sensor_suite_a918\n'
-    html += '│   ├── secondary_sensor_suite_c624\n'
-    html += '│   └── failsafe_systems_d837\n'
-    html += '├── validation_process_e542\n'
-    html += '│   └── multi_level_verification_b213\n'
-    html += '├── safety_protocols_9c31\n'
-    html += '│   ├── emergency_procedures_a432\n'
-    html += '│   ├── fault_detection_b548\n'
-    html += '│   └── degraded_mode_operation_c659</div>\n'
-    html += '            <div class="approach-meta">\n'
-    html += '                <p>Created by: Iterative AI v2.4</p>\n'
-    html += '                <p>Votes: <span class="vote-count">24</span></p>\n'
-    html += '            </div>\n'
-    html += '            <div class="approach-actions">\n'
-    html += '                <button class="button secondary vote-button">\n'
-    html += '                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\n'
-    html += '                        <path d="M12 4L18 10H6L12 4Z" fill="currentColor"/>\n'
-    html += '                    </svg>\n'
-    html += '                    Vote Up\n'
-    html += '                </button>\n'
-    html += '                <a href="#" class="button secondary">View Full Tree</a>\n'
-    html += '            </div>\n'
-    html += '        </div>\n'
-
-    # Approach 3
-    html += '        <div class="approach-card">\n'
-    html += '            <h4>Hybridized Approach</h4>\n'
-    html += '            <p>This approach balances efficiency with safety considerations.</p>\n'
-    html += '            <div class="approach-preview">\n'
-    html += 'hybrid_system\n'
-    html += '├── sensor_fusion_a329\n'
-    html += '│   ├── multi_modal_sensing_b428\n'
-    html += '│   ├── environmental_mapping_c529\n'
-    html += '│   └── object_tracking_d630\n'
-    html += '├── decision_making_e731\n'
-    html += '│   ├── situation_assessment_f832\n'
-    html += '│   ├── risk_evaluation_g933\n'
-    html += '│   └── action_selection_h034</div>\n'
-    html += '            <div class="approach-meta">\n'
-    html += '                <p>Created by: Iterative AI v2.5</p>\n'
-    html += '                <p>Votes: <span class="vote-count">42</span></p>\n'
-    html += '            </div>\n'
-    html += '            <div class="approach-actions">\n'
-    html += '                <button class="button secondary vote-button">\n'
-    html += '                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\n'
-    html += '                        <path d="M12 4L18 10H6L12 4Z" fill="currentColor"/>\n'
-    html += '                    </svg>\n'
-    html += '                    Vote Up\n'
-    html += '                </button>\n'
-    html += '                <a href="#" class="button secondary">View Full Tree</a>\n'
-    html += '            </div>\n'
-    html += '        </div>\n'
     html += '    </div>\n'
 
     # Why Multiple Approaches section
@@ -389,7 +470,7 @@ def generate_breadcrumbs_html(breadcrumbs):
     return html
 
 def generate_page_html(template_html, metadata, tree_data, timeline_data, challenges_data,
-                       adoption_data, implementation_data, roi_data, future_tech_data, specs_data, breadcrumbs):
+                       adoption_data, implementation_data, roi_data, future_tech_data, specs_data, breadcrumbs, alt_trees_data=None):
     """Generate the complete HTML page using the template and JSON data."""
     # Replace title, subtitle, and status
     new_html = template_html.replace('Bread Making', metadata['page_metadata']['title'])
@@ -429,7 +510,7 @@ def generate_page_html(template_html, metadata, tree_data, timeline_data, challe
     standard_process_html = generate_standard_process_html(tree_data)
     automation_pathway_html = generate_automation_pathway_html(adoption_data, implementation_data, roi_data)
     technical_details_html = generate_technical_details_html(future_tech_data, specs_data)
-    competing_approaches_html = generate_competing_approaches_html()
+    competing_approaches_html = generate_competing_approaches_html(alt_trees_data)
 
     # Generate timeline and challenges HTML
     timeline_html = generate_automation_timeline_html(timeline_data)
@@ -500,7 +581,14 @@ def generate_page_html(template_html, metadata, tree_data, timeline_data, challe
     # Update breadcrumb
     if breadcrumbs:
         breadcrumbs_html = generate_breadcrumbs_html(breadcrumbs)
-        new_html = new_html.replace('<span><a href="/food-production/baking/index">Baking</a></span>', breadcrumbs_html)
+        # Find and replace the entire default breadcrumbs section
+        breadcrumbs_start = new_html.find('<div class="breadcrumbs">')
+        if breadcrumbs_start != -1:
+            breadcrumbs_end = new_html.find('</div>', breadcrumbs_start) + 6  # Include the closing </div>
+            new_html = new_html[:breadcrumbs_start] + breadcrumbs_html + new_html[breadcrumbs_end:]
+        else:
+            # Fallback if the exact structure isn't found
+            new_html = new_html.replace('<span><a href="/food-production/baking/index">Baking</a></span>', breadcrumbs_html)
 
     return new_html
 
@@ -538,6 +626,19 @@ def main():
     future_tech_path = os.path.join(flow_dir, "8.json")
     specs_path = os.path.join(flow_dir, "9.json")
     
+    # Find alternative tree files if they exist
+    alternative_trees = []
+    i = 1
+    while True:
+        alt_path = os.path.join(flow_dir, f"alt{i}.json")
+        if os.path.exists(alt_path):
+            alternative_trees.append(alt_path)
+            i += 1
+        else:
+            break
+    
+    print(f"Found {len(alternative_trees)} alternative tree files")
+    
     # Path to the template HTML
     template_path = os.path.join("flow", "template.html")
     
@@ -565,9 +666,40 @@ def main():
         challenges_data = read_json_file(challenges_path)
         adoption_data = read_json_file(adoption_path)["automation_adoption"]
         implementation_data = read_json_file(implementation_path)
-        roi_data = read_json_file(roi_path)["roi_analysis"]
+        roi_data = read_json_file(roi_path)
+        
+        # Ensure roi_data is properly structured for use
+        if "roi_analysis" not in roi_data and "roi_analysis" in roi_data:
+            # This is a no-op condition, left for clarity
+            pass
+        else:
+            # Create a normalized structure
+            roi_data = {"roi_analysis": roi_data}
+        
         future_tech_data = read_json_file(future_tech_path)["future_technology"]
         specs_data = read_json_file(specs_path)["industrial_specifications"]
+        
+        # Process alternative trees
+        alt_trees_data = []
+        approach_names = ["Efficiency-Optimized Approach", "Safety-Optimized Approach", "Hybridized Approach"]
+        approach_descs = [
+            "This approach prioritizes minimizing resource usage and production time.",
+            "This approach focuses on maximizing safety and reliability.",
+            "This approach balances efficiency with safety considerations."
+        ]
+        
+        for i, alt_path in enumerate(alternative_trees):
+            try:
+                alt_data = read_json_file(alt_path)
+                # Add names and descriptions
+                approach_name = approach_names[i] if i < len(approach_names) else f"Alternative Approach {i+1}"
+                approach_desc = approach_descs[i] if i < len(approach_descs) else "An alternative methodology for approaching this process."
+                alt_data["approach_name"] = approach_name
+                alt_data["approach_description"] = approach_desc
+                alt_trees_data.append(alt_data)
+            except Exception as e:
+                print(f"Warning: Error processing alternative tree {alt_path}: {e}")
+                continue
 
         # Generate new HTML page
         new_html = generate_page_html(
@@ -581,7 +713,8 @@ def main():
             roi_data,
             future_tech_data,
             specs_data,
-            breadcrumbs
+            breadcrumbs,
+            alt_trees_data
         )
 
         # Determine output path
