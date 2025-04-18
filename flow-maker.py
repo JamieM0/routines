@@ -85,6 +85,7 @@ def main():
         ("return-analysis.py", "7.json"),  # 7. return-analysis.py
         ("future-technology.py", "8.json"),  # 8. future-technology.py
         ("specifications-industrial.py", "9.json"),  # 9. specifications-industrial.py
+        ("assemble.py", "10.json"),  # 10. assemble.py
     ]
     
     # Run each program in sequence
@@ -95,13 +96,13 @@ def main():
         output_path = os.path.join(flow_dir, output_filename)
         
         # Handle special parameters for hallucinate-tree.py
-        extra_args = None
+        extra_args = ["-saveInputs", "-flow_uuid", flow_uuid]
         if program == "hallucinate-tree.py":
-            extra_args = ["-flat"]
+            extra_args += ["-flat"]
         
         # Run the program
         success = run_program(program, input_copy_path, output_path, extra_args)
-        
+
         if not success:
             print(f"Warning: {program} failed to complete successfully")
     

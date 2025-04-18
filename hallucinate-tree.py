@@ -6,8 +6,11 @@ import re
 from datetime import datetime
 from utils import (
     load_json, save_output, chat_with_llm, parse_llm_json_response,
-    create_output_metadata, get_output_filepath, handle_command_args, translate_to_basic_english
+    create_output_metadata, get_output_filepath, handle_command_args, translate_to_basic_english,
+    saveToFile
 )
+
+flowUUID = None # Global variable for flow UUID
 
 def sanitize_filename(name):
     """Convert a step name to a valid directory name using lowercase and underscores."""
@@ -88,7 +91,7 @@ def save_tree_as_flat_json(tree, metadata, output_path):
     
     return output_path
 
-def generate_task_tree(input_data):
+def generate_task_tree(input_data, save_inputs=False):
     """Generate a structured task tree using AI hallucinations."""
     task = input_data.get("topic", "Unknown Task")
     depth = input_data.get("depth", 2)  # Default depth of 2
@@ -114,6 +117,12 @@ def generate_task_tree(input_data):
             f"Task: {step}\n\n"
             "Return ONLY a JSON array of step objects, with no markdown formatting, code blocks, or extra text."
         )
+        
+        # Save inputs to file if requested
+        if save_inputs:
+            # Create unique filename for each step using timestamp
+            save_path = f"flow/{flowUUID}/inputs/2-in.json"
+            saveToFile(system_msg, user_msg, save_path)
         
         # Use chat_with_llm instead of direct ollama.chat
         response_text = chat_with_llm(model, system_msg, user_msg, parameters)
@@ -147,7 +156,8 @@ def generate_task_tree(input_data):
 
 def main():
     """Main function to run the hallucination-based tree generation."""
-    usage_msg = "Usage: python hallucinate-tree.py <input_json> [output_dir] [-flat]"
+    global flowUUID
+    usage_msg = "Usage: python hallucinate-tree.py <input_json> [output_dir] [-flat] [-saveInputs] [-uuid=\"UUID\"] [-flow_uuid=\"FLOW-UUID\"]"
     
     # Use handle_command_args utility and check for -flat flag
     args = sys.argv[1:]
@@ -157,13 +167,14 @@ def main():
     
     # Update to pass the remaining args to handle_command_args
     sys.argv = [sys.argv[0]] + args
-    input_filepath, specified_output_path = handle_command_args(usage_msg)
+    input_filepath, specified_output_path, save_inputs, custom_uuid, flow_uuid_arg = handle_command_args(usage_msg)
+    flowUUID = flow_uuid_arg # Set the global variable
 
     print("Working...")
     start_time = datetime.now()
     
     input_data = load_json(input_filepath)
-    tree_content = generate_task_tree(input_data)
+    tree_content = generate_task_tree(input_data, save_inputs)
     
     # Generate a UUID for this tree
     tree_uuid = tree_content["uuid"]

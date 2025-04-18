@@ -126,6 +126,28 @@ def get_output_filepath(output_dir, output_uuid=None, specified_path=None):
 
 def handle_command_args(usage_msg, min_args=1, max_args=2):
     """Process command line arguments with validation."""
+    # Check for -saveInputs flag
+    save_inputs = "-saveInputs" in sys.argv
+    if save_inputs:
+        # Remove the flag from argv for further processing
+        sys.argv.remove("-saveInputs")
+    
+    # Check for -uuid flag
+    custom_uuid = None
+    for arg in list(sys.argv):  # Create a copy of sys.argv to modify while iterating
+        if arg.startswith("-uuid="):
+            custom_uuid = arg.split("=", 1)[1].strip('"')
+            if custom_uuid:  # Only remove if we got a valid UUID
+                sys.argv.remove(arg)
+                
+    # Check for -flow_uuid flag
+    flow_uuid = None
+    for arg in list(sys.argv):
+        if arg.startswith("-flow_uuid="):
+            flow_uuid = arg.split("=", 1)[1].strip('"')
+            if flow_uuid:
+                sys.argv.remove(arg)
+    
     if len(sys.argv) > max_args + 1 or len(sys.argv) < min_args + 1:
         print(usage_msg)
         sys.exit(1)
@@ -133,7 +155,31 @@ def handle_command_args(usage_msg, min_args=1, max_args=2):
     input_filepath = sys.argv[1]
     output_filepath = sys.argv[2] if len(sys.argv) > 2 else None
     
-    return input_filepath, output_filepath
+    return input_filepath, output_filepath, save_inputs, custom_uuid, flow_uuid
+
+def saveToFile(system_message, user_message, filepath):
+    """Save system message and user message to a JSON file.
+    
+    Used for debugging and logging prompt inputs when requested via -saveInputs flag.
+    
+    Args:
+        system_message: The system message sent to the LLM
+        user_message: The user message sent to the LLM
+        filepath: Path where the JSON file should be saved
+    """
+    data = {
+        "system_message": system_message,
+        "user_message": user_message,
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    
+    with open(filepath, "w", encoding="utf-8") as file:
+        json.dump(data, file, indent=4, ensure_ascii=False)
+    
+    print(f"Saved LLM inputs to {filepath}")
 
 def translate_to_basic_english(text, model="gemma3", parameters=None):
     """Convert text to Basic English for use in folder names."""

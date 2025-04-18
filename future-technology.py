@@ -4,8 +4,11 @@ import re
 from datetime import datetime
 from utils import (
     load_json, save_output, chat_with_llm,
-    create_output_metadata, get_output_filepath, handle_command_args
+    create_output_metadata, get_output_filepath, handle_command_args,
+    saveToFile
 )
+
+flowUUID = None # Global variable for flow UUID
 
 def sanitize_json_string(json_str):
     """Remove control characters and other invalid characters from a JSON string."""
@@ -47,7 +50,7 @@ def extract_json_from_response(response):
     
     return None
 
-def generate_future_technology(input_data):
+def generate_future_technology(input_data, save_inputs=False):
     """Generate an overview of technology needed for full automation of a topic."""
     # Extract information from input data
     topic = input_data.get("topic", "")
@@ -73,6 +76,11 @@ def generate_future_technology(input_data):
                 "\nPlease return ONLY valid JSON without any additional text, explanation, or code block formatting."
     )
     
+    # Save inputs to file if requested
+    if save_inputs:
+        save_path = f"flow/{flowUUID}/inputs/8-in.json"
+        saveToFile(systemMsg, user_msg, save_path)
+    
     # Use chat_with_llm to generate future technology analysis
     response = chat_with_llm(model, systemMsg, user_msg, parameters)
     
@@ -87,14 +95,16 @@ def generate_future_technology(input_data):
 
 def main():
     """Main function to run the future technology analysis."""
-    usage_msg = "Usage: python future-technology.py <input_json> [output_json]"
-    input_filepath, specified_output_filepath = handle_command_args(usage_msg)
+    global flowUUID
+    usage_msg = "Usage: python future-technology.py <input_json> [output_json] [-saveInputs] [-uuid=\"UUID\"] [-flow_uuid=\"FLOW-UUID\"]"
+    input_filepath, specified_output_filepath, save_inputs, custom_uuid, flow_uuid_arg = handle_command_args(usage_msg)
+    flowUUID = flow_uuid_arg # Set the global variable
 
     print("Working...")
     start_time = datetime.now()
     
     input_data = load_json(input_filepath)
-    tech_data = generate_future_technology(input_data)
+    tech_data = generate_future_technology(input_data, save_inputs)
     
     if tech_data is None:
         print("Failed to generate future technology analysis.")

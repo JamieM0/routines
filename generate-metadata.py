@@ -3,10 +3,13 @@ import sys
 from datetime import datetime
 from utils import (
     load_json, save_output, chat_with_llm,
-    create_output_metadata, get_output_filepath, handle_command_args
+    create_output_metadata, get_output_filepath, handle_command_args,
+    saveToFile
 )
 
-def generate_page_metadata(input_data):
+flowUUID = None # Global variable for flow UUID
+
+def generate_page_metadata(input_data, save_inputs=False):
     """Generate standardized metadata for a topic page."""
     # Extract information from input data
     topic = input_data.get("topic", "")
@@ -30,6 +33,11 @@ def generate_page_metadata(input_data):
     )
     
     user_msg = f"Create metadata for a Universal Automation Wiki page about: {topic}"
+    
+    # Save inputs to file if requested
+    if save_inputs:
+        save_path = f"flow/{flowUUID}/inputs/1-in.json"
+        saveToFile(systemMsg, user_msg, save_path)
     
     # Use chat_with_llm to generate metadata
     response = chat_with_llm(model, systemMsg, user_msg, parameters)
@@ -66,14 +74,16 @@ def generate_page_metadata(input_data):
 
 def main():
     """Main function to run the metadata generation."""
-    usage_msg = "Usage: python generate-metadata.py <input_json> [output_json]"
-    input_filepath, specified_output_filepath = handle_command_args(usage_msg)
+    global flowUUID
+    usage_msg = "Usage: python generate-metadata.py <input_json> [output_json] [-saveInputs] [-uuid=\"UUID\"] [-flow_uuid=\"FLOW-UUID\"]"
+    input_filepath, specified_output_filepath, save_inputs, custom_uuid, flow_uuid_arg = handle_command_args(usage_msg)
+    flowUUID = flow_uuid_arg # Set the global variable
 
     print("Working...")
     start_time = datetime.now()
     
     input_data = load_json(input_filepath)
-    metadata = generate_page_metadata(input_data)
+    metadata = generate_page_metadata(input_data, save_inputs)
     
     if metadata is None:
         print("Failed to generate metadata.")
