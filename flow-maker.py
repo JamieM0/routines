@@ -96,7 +96,7 @@ def main():
         output_path = os.path.join(flow_dir, output_filename)
         
         # Handle special parameters for hallucinate-tree.py
-        extra_args = ["-saveInputs", "-flow_uuid", flow_uuid]
+        extra_args = ["-saveInputs", "-flow_uuid="+flow_uuid]
         if program == "hallucinate-tree.py":
             extra_args += ["-flat"]
         
@@ -141,7 +141,7 @@ def main():
         
         # Generate each alternative tree
         for i, alt_input in enumerate(alternative_inputs):
-            alt_input_path = os.path.join(flow_dir, f"alt_input_{i+1}.json")
+            alt_input_path = os.path.join(flow_dir, f"inputs/alt_input_{i+1}.json")
             alt_output_path = os.path.join(flow_dir, f"alt{i+1}.json")
             
             # Save the alternative input
