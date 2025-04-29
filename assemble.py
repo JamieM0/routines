@@ -2,298 +2,19 @@ import json
 import os
 import sys
 from pathlib import Path
+from jinja2 import Environment, FileSystemLoader
+from datetime import datetime # Import datetime
 
 def read_json_file(file_path):
     """Read a JSON file and return its contents as a Python dictionary."""
     with open(file_path, 'r', encoding='utf-8') as file:
         return json.load(file)
 
-def generate_automation_timeline_html(timeline_data):
-    """Generate HTML for the automation timeline section."""
-    html = '<div class="automation-timeline">\n'
-    html += '    <h3>Automation Development Timeline</h3>\n'
-
-    # Historical timeline entries
-    for year, content in timeline_data['timeline']['historical'].items():
-        html += f'    <div class="timeline-entry">\n'
-        html += f'        <div class="timeline-year">{year}</div>\n'
-        html += f'        <div class="timeline-content">\n'
-        # Check for and process bold text (** pattern)
-        content = process_bold_text(content)
-        html += f'            <p>{content}</p>\n'
-        html += f'        </div>\n'
-        html += f'    </div>\n'
-
-    # Predictions timeline entries - with teal color for year background and italics for content
-    for year, content in timeline_data['timeline']['predictions'].items():
-        html += f'    <div class="timeline-entry">\n'
-        html += f'        <div class="timeline-year-prediction">{year}</div>\n'
-        html += f'        <div class="timeline-content">\n'
-        # Check for and process bold text (** pattern)
-        content = process_bold_text(content)
-        # Add italics to the prediction text
-        html += f'            <p><em>{content}</em></p>\n'
-        html += f'        </div>\n'
-        html += f'    </div>\n'
-
-    html += '</div>\n'
-    return html
-
 def process_bold_text(text):
     """Replace text surrounded by ** with HTML bold tags."""
     import re
     # Find all text surrounded by ** and replace with <strong> tags
     return re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', text)
-
-def generate_automation_challenges_html(challenges_data):
-    """Generate HTML for the automation challenges section."""
-    html = '<div class="automation-challenges">\n'
-    html += f'    <h3>Current Automation Challenges</h3>\n'
-    if "topic" in challenges_data["challenges"]:
-        html += f'    <p>Despite significant progress, several challenges remain in fully automating the {challenges_data["challenges"]["topic"].split()[0].lower()} process:</p>\n'
-    elif "field" in challenges_data["challenges"]:
-        html += f'    <p>Despite significant progress, several challenges remain in fully automating the {challenges_data["challenges"]["field"].split()[0].lower()} process:</p>\n'
-    else:
-        html += '    <p>Despite significant progress, several challenges remain in fully automating the process:</p>\n'
-    html += f'    <ul>\n'
-
-    for challenge in challenges_data['challenges']['challenges']:
-        # Split explanation into paragraphs if needed
-        explanations = challenge['explanation'].split('  ')
-        html += f'        <li><strong>{challenge["title"]}:</strong> {explanations[0]}</li>\n'
-
-    html += f'    </ul>\n'
-    html += '</div>\n'
-    return html
-
-def generate_standard_process_html(tree_data):
-    """Generate HTML for the standard process tab content."""
-    html = '<div id="standard-process" class="tab-content active">\n'
-
-    # Process each top-level step in the tree
-    for i, step in enumerate(tree_data['tree']['children']):
-        html += f'    <div class="process-section">\n'
-        html += f'        <h3>{i+1}. {step["step"]}</h3>\n'
-        # Add a placeholder description
-        html += f'        <p>This step involves {step["step"].lower()}.</p>\n'
-        html += f'        <h4>Key Steps:</h4>\n'
-        html += f'        <ul class="step-list">\n'
-
-        # Add child steps if they exist
-        if "children" in step:
-            for child_step in step["children"]:
-                html += f'            <li>{child_step["step"]}</li>\n'
-
-        html += f'        </ul>\n'
-        # Add a placeholder automation status
-        html += f'        <p><strong>Automation Status:</strong> Currently being developed and refined.</p>\n'
-        html += f'    </div>\n'
-
-    # Add timeline and challenges sections
-    html += '    {{TIMELINE_PLACEHOLDER}}\n'
-    html += '    {{CHALLENGES_PLACEHOLDER}}\n'
-    html += '</div>\n'
-    return html
-
-
-def generate_automation_pathway_html(adoption_data, implementation_data, roi_data):
-    """Generate HTML for the automation pathway tab content."""
-    html = '<div id="automation-pathway" class="tab-content">\n'
-
-    # Automation Adoption Framework section
-    html += '    <div class="process-section">\n'
-    html += '        <h3>Automation Adoption Framework</h3>\n'
-    html += '        <p>This framework outlines the pathway to full automation, detailing the progression from manual processes to fully automated systems.</p>\n'
-
-    # Process each phase in the adoption data
-    phase_keys = sorted([k for k in adoption_data.keys() if k.startswith('phase')])
-    for phase_key in phase_keys:
-        phase = adoption_data[phase_key]
-        # Process bold text in the title
-        title = process_bold_text(phase["title"])
-        status = process_bold_text(phase["status"])
-        html += f'        <h4>{title} ({status})</h4>\n'
-        html += '        <ul class="step-list">\n'
-        for example in phase["examples"]:
-            # Process bold text in each example
-            example = process_bold_text(example)
-            html += f'            <li>{example}</li>\n'
-        html += '        </ul>\n'
-
-    html += '    </div>\n'
-
-    # Current Implementation Levels section
-    html += '    <div class="process-section">\n'
-    html += '        <h3>Current Implementation Levels</h3>\n'
-    html += '        <p>The table below shows the current automation levels across different scales:</p>\n'
-    html += '        <table class="automation-table">\n'
-    html += '            <thead>\n'
-    html += '                <tr>\n'
-    html += '                    <th>Process Step</th>\n'
-    html += '                    <th>Small Scale</th>\n'
-    html += '                    <th>Medium Scale</th>\n'
-    html += '                    <th>Large Scale</th>\n'
-    html += '                </tr>\n'
-    html += '            </thead>\n'
-    html += '            <tbody>\n'
-
-    # Correctly access the implementation data
-    for step in implementation_data["implementation_assessment"]["process_steps"]:
-        # Process bold text in each cell
-        step_name = process_bold_text(step["step_name"])
-        low_scale = process_bold_text(step["automation_levels"]["low_scale"])
-        medium_scale = process_bold_text(step["automation_levels"]["medium_scale"])
-        high_scale = process_bold_text(step["automation_levels"]["high_scale"])
-        
-        html += '                <tr>\n'
-        html += f'                    <td>{step_name}</td>\n'
-        html += f'                    <td>{low_scale}</td>\n'
-        html += f'                    <td>{medium_scale}</td>\n'
-        html += f'                    <td>{high_scale}</td>\n'
-        html += '                </tr>\n'
-
-    html += '            </tbody>\n'
-    html += '        </table>\n'
-    html += '    </div>\n'
-
-    # ROI Analysis section - FIXED to match the actual JSON structure
-    html += '    <div class="process-section">\n'
-    html += '        <h3>Automation ROI Analysis</h3>\n'
-    html += '        <p>The return on investment for automation depends on scale and production volume:</p>\n'
-    html += '        <ul class="step-list">\n'
-
-    # Correctly access the nested ROI timeframe data
-    for scale in ["small_scale", "medium_scale", "large_scale"]:
-        if "roi_analysis" in roi_data and scale in roi_data["roi_analysis"]:
-            # Make sure timeframe exists and handle different possible structures
-            scale_data = roi_data["roi_analysis"][scale]
-            if isinstance(scale_data, dict) and "timeframe" in scale_data:
-                timeframe = process_bold_text(scale_data["timeframe"])
-                scale_display = scale.replace('_', ' ').title()
-                html += f'            <li><strong>{scale_display}:</strong> {timeframe}</li>\n'
-
-    html += '        </ul>\n'
-
-    # Key benefits section
-    if "key_benefits" in roi_data:
-        # Check if key_benefits is a list or a string
-        if isinstance(roi_data["key_benefits"], list):
-            if len(roi_data["key_benefits"]) > 0:
-                # Handle case where key_benefits is a list
-                # Process bold text in each benefit
-                processed_benefits = [process_bold_text(benefit) for benefit in roi_data["key_benefits"]]
-                
-                html += '        <p>Key benefits driving ROI include '
-                if len(processed_benefits) == 1:
-                    html += f'{processed_benefits[0]}.</p>\n'
-                else:
-                    html += ', '.join(processed_benefits[:-1]) + ', and ' + \
-                            processed_benefits[-1] + '.</p>\n'
-        elif isinstance(roi_data["key_benefits"], str):
-            # Handle case where key_benefits is a string
-            processed_benefit = process_bold_text(roi_data["key_benefits"])
-            html += f'        <p>Key benefits driving ROI include {processed_benefit}.</p>\n'
-
-    html += '    </div>\n'
-    html += '</div>\n'
-    return html
-
-def generate_technical_details_html(future_tech_data, specs_data):
-    """Generate HTML for the technical details tab content."""
-    html = '<div id="technical-details" class="tab-content">\n'
-
-    # Automation Technologies section
-    html += '    <div class="process-section">\n'
-    html += '        <h3>Automation Technologies</h3>\n'
-    html += '        <p>This section details the underlying technologies enabling automation.</p>\n'
-
-    # Sensory Systems
-    html += '        <h4>Sensory Systems</h4>\n'
-    html += '        <ul class="step-list">\n'
-    for sensor in future_tech_data["sensory_systems"]:
-        name = process_bold_text(sensor["name"])
-        description = process_bold_text(sensor["description"])
-        html += f'            <li><strong>{name}:</strong> {description}</li>\n'
-    html += '        </ul>\n'
-
-    # Control Systems
-    html += '        <h4>Control Systems</h4>\n'
-    html += '        <ul class="step-list">\n'
-    for control in future_tech_data["control_systems"]:
-        name = process_bold_text(control["name"])
-        description = process_bold_text(control["description"])
-        html += f'            <li><strong>{name}:</strong> {description}</li>\n'
-    html += '        </ul>\n'
-
-    # Mechanical Systems
-    html += '        <h4>Mechanical Systems</h4>\n'
-    html += '        <ul class="step-list">\n'
-    for mech in future_tech_data["mechanical_systems"]:
-        name = process_bold_text(mech["name"])
-        description = process_bold_text(mech["description"])
-        html += f'            <li><strong>{name}:</strong> {description}</li>\n'
-    html += '        </ul>\n'
-
-    # Software Integration
-    html += '        <h4>Software Integration</h4>\n'
-    html += '        <ul class="step-list">\n'
-    for software in future_tech_data["software_integration"]:
-        name = process_bold_text(software["name"])
-        description = process_bold_text(software["description"])
-        html += f'            <li><strong>{name}:</strong> {description}</li>\n'
-    html += '        </ul>\n'
-    html += '    </div>\n'
-
-    # Technical Specifications section
-    html += '    <div class="process-section">\n'
-    html += '        <h3>Technical Specifications for Commercial Automation</h3>\n'
-    html += '        <p>Standard parameters for industrial production:</p>\n'
-
-    # Performance Metrics
-    html += '        <h4>Performance Metrics</h4>\n'
-    html += '        <ul class="step-list">\n'
-    for metric in specs_data["performance_metrics"]:
-        # Process name and value with bold text function
-        name = process_bold_text(metric["name"])
-        value = process_bold_text(metric["value"])
-        
-        # Handle various possible structures for the range information
-        range_info = ""
-        if "range" in metric:
-            range_text = process_bold_text(metric['range'])
-            range_info = f" (Range: {range_text})"
-        elif "description" in metric:
-            # If no range field but description exists, include the description instead
-            desc_text = process_bold_text(metric['description'])
-            range_info = f" - {desc_text}"
-            
-        html += f'            <li>{name}: {value}{range_info}</li>\n'
-    html += '        </ul>\n'
-
-    # Implementation Requirements
-    html += '        <h4>Implementation Requirements</h4>\n'
-    html += '        <ul class="step-list">\n'
-    for req in specs_data["implementation_requirements"]:
-        # Process name with bold text function
-        name = process_bold_text(req["name"])
-        
-        # Handle different field names for specification
-        spec_info = ""
-        if "specification" in req:
-            spec_info = process_bold_text(req["specification"])
-        elif "value" in req:
-            spec_info = process_bold_text(req["value"])
-        elif "description" in req:
-            spec_info = process_bold_text(req["description"])
-        else:
-            spec_info = "Specification not available"
-            
-        html += f'            <li>{name}: {spec_info}</li>\n'
-    html += '        </ul>\n'
-    html += '    </div>\n'
-
-    html += '</div>\n'
-    return html
 
 def generate_tree_preview_text(tree_data):
     """Generate a text representation of a tree suitable for the approach preview."""
@@ -353,392 +74,265 @@ def generate_tree_preview_text(tree_data):
     
     return "\n".join(lines)
 
-def generate_competing_approaches_html(alt_trees_data=None):
-    """Generate HTML for the competing approaches tab content."""
-    html = '<div id="competing-approaches" class="tab-content">\n'
-    html += '    <div class="process-section">\n'
-    html += '        <h3>Alternative Approaches</h3>\n'
-    html += '        <p>These are alternative automation trees generated by different versions of our Iterative AI algorithm. Browse these competing models and vote for approaches you find most effective.</p>\n'
-    html += '    </div>\n'
+def process_metadata(metadata, breadcrumb_str):
+    """Process metadata, add contributors/date, and incorporate breadcrumbs."""
+    result = metadata.get('page_metadata', {})
 
-    # Approaches grid
-    html += '    <div class="approaches-grid">\n'
-
-    # If we have real alternative trees, use them
-    if alt_trees_data and len(alt_trees_data) > 0:
-        for i, alt_tree in enumerate(alt_trees_data):
-            approach_name = alt_tree.get("approach_name", f"Alternative Approach {i+1}")
-            approach_desc = alt_tree.get("approach_description", "An alternative methodology for approaching this process.")
-            
-            # Generate a preview of the tree structure
-            tree_preview = generate_tree_preview_text(alt_tree)
-            
-            # Random-ish vote counts that decrease as index increases
-            vote_count = max(5, 42 - (i * 8) + (i * i))
-            
-            html += f'        <div class="approach-card">\n'
-            html += f'            <h4>{approach_name}</h4>\n'
-            html += f'            <p>{approach_desc}</p>\n'
-            html += f'            <div class="approach-preview">\n{tree_preview}</div>\n'
-            html += '            <div class="approach-meta">\n'
-            html += f'                <p>Created by: Iterative AI Alpha</p>\n'
-            html += f'                <p>Votes: <span class="vote-count">{vote_count}</span></p>\n'
-            html += '            </div>\n'
-            html += '            <div class="approach-actions">\n'
-            html += '                <button class="button secondary vote-button">\n'
-            html += '                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\n'
-            html += '                        <path d="M12 4L18 10H6L12 4Z" fill="currentColor"/>\n'
-            html += '                    </svg>\n'
-            html += '                    Vote Up\n'
-            html += '                </button>\n'
-            html += '                <a href="#" class="button secondary">View Full Tree</a>\n'
-            html += '            </div>\n'
-            html += '        </div>\n'
+    # Handle progress percentage (use existing logic)
+    if 'automation_progress' in result:
+        progress_text = result['automation_progress']
+    elif 'progress_percentage' in result:
+        progress_text = result['progress_percentage']
     else:
-        # Default placeholders if no alternatives
-        html += '        <div class="approach-card">\n'
-        html += '            <h4>Efficiency-Optimized Approach</h4>\n'
-        html += '            <p>This approach prioritizes minimizing resource usage and production time.</p>\n'
-        html += '            <div class="approach-preview">\n'
-        html += 'efficiency_optimized\n'
-        html += '├── sensor_data_collection_8f29\n'
-        html += '│   ├── lidar_scanning_a421\n'
-        html += '│   └── camera_imaging_c731\n'
-        html += '├── data_processing_d54f\n'
-        html += '│   ├── object_detection_b651\n'
-        html += '│   ├── path_planning_e922\n'
-        html += '│   └── decision_making_f110\n'
-        html += '├── control_execution_4a12\n'
-        html += '└── monitoring_feedback_7b29</div>\n'
-        html += '            <div class="approach-meta">\n'
-        html += '                <p>Created by: Iterative AI v2.3</p>\n'
-        html += '                <p>Votes: <span class="vote-count">18</span></p>\n'
-        html += '            </div>\n'
-        html += '            <div class="approach-actions">\n'
-        html += '                <button class="button secondary vote-button">\n'
-        html += '                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\n'
-        html += '                        <path d="M12 4L18 10H6L12 4Z" fill="currentColor"/>\n'
-        html += '                    </svg>\n'
-        html += '                    Vote Up\n'
-        html += '                </button>\n'
-        html += '                <a href="#" class="button secondary">View Full Tree</a>\n'
-        html += '            </div>\n'
-        html += '        </div>\n'
+        progress_text = "0"  # Default fallback to 0 if missing
 
-    html += '    </div>\n'
+    # Extract numeric value from progress text
+    try:
+        result['progress_percentage'] = int(''.join(filter(str.isdigit, str(progress_text))))
+    except ValueError:
+        result['progress_percentage'] = 0 # Fallback if conversion fails
 
-    # Why Multiple Approaches section
-    html += '    <div class="process-section">\n'
-    html += '        <h3>Why Multiple Approaches?</h3>\n'
-    html += '        <p>Different methodologies offer unique advantages depending on context:</p>\n'
-    html += '        <ul class="step-list">\n'
-    html += '            <li><strong>Scale considerations:</strong> Some approaches work better for large-scale production, while others are more suitable for specialized applications</li>\n'
-    html += '            <li><strong>Resource constraints:</strong> Different methods optimize for different resources (time, computing power, energy)</li>\n'
-    html += '            <li><strong>Quality objectives:</strong> Approaches vary in their emphasis on safety, efficiency, adaptability, and reliability</li>\n'
-    html += '            <li><strong>Automation potential:</strong> Some approaches are more easily adapted to full automation than others</li>\n'
-    html += '        </ul>\n'
-    html += '        <p>By voting for approaches you find most effective, you help our community identify the most promising automation pathways.</p>\n'
-    html += '    </div>\n'
-    html += '</div>\n'
+    # Process summary: Use 'explanatory_text' as fallback for 'summary'
+    summary_content = result.get('summary', result.get('explanatory_text'))
 
-    return html
-
-def generate_breadcrumbs_html(breadcrumbs):
-    """Generate HTML for customized breadcrumbs navigation."""
-    if not breadcrumbs:
-        return None
-        
-    # Split the breadcrumbs by '/'
-    parts = breadcrumbs.split('/')
-    
-    # Generate HTML for breadcrumbs
-    html = '<div class="breadcrumbs">\n'
-    html += '    <span><a href="/index">Home</a></span>\n'
-    
-    # Build the path incrementally for each part
-    path = ""
-    for i, part in enumerate(parts[:-1]):  # All but the last part (current page)
-        path += f"/{part}"
-        display_name = part.replace('-', ' ').title()
-        html += f'    <span><a href="{path}/index">{display_name}</a></span>\n'
-    
-    # Add the current page (last part) without a link
-    current_page = parts[-1].replace('-', ' ').title()
-    html += f'    <span>{current_page}</span>\n'
-    html += '</div>\n'
-    
-    return html
-
-def generate_page_html(template_html, metadata, tree_data, timeline_data, challenges_data,
-                       adoption_data, implementation_data, roi_data, future_tech_data, specs_data, breadcrumbs, alt_trees_data=None):
-    """Generate the complete HTML page using the template and JSON data."""
-    # Replace title, subtitle, and status
-    new_html = template_html.replace('Bread Making', metadata['page_metadata']['title'])
-    new_html = new_html.replace('<span>Bread Making</span>', f'<span>{metadata["page_metadata"]["title"]}</span>')
-    new_html = new_html.replace('<span>Partial Automation Available</span>', f'<span>{metadata["page_metadata"]["automation_status"]}</span>')
-
-    # Replace the subtitle (fixing the bread production issue)
-    new_html = new_html.replace(
-        '<p class="hero-subtitle">Exploring automation possibilities in artisanal and commercial bread production</p>',
-        f'<p class="hero-subtitle">{metadata["page_metadata"]["subtitle"]}</p>'
-    )
-
-    # Replace progress bar (assuming 50% for partial automation, adjust as needed)
-    # Check if progress is in automation_progress or progress_percentage field
-    if 'automation_progress' in metadata['page_metadata']:
-        progress_text = metadata['page_metadata']['automation_progress']
-    elif 'progress_percentage' in metadata['page_metadata']:
-        progress_text = metadata['page_metadata']['progress_percentage']
-    else:
-        progress_text = "50%"  # Default fallback
-        
-    # Remove any non-digit characters and convert to integer
-    progress_percentage = int(''.join(filter(str.isdigit, progress_text)))
-    progress_style = f'style="width: {progress_percentage}%;"'
-    new_html = new_html.replace('<div class="progress-fill"></div>', f'<div class="progress-fill" {progress_style}></div>')
-
-    # Replace article summary
-    summary_paragraphs = metadata['page_metadata']['explanatory_text'].split('\n\n')
-    summary_html = ""
-    for paragraph in summary_paragraphs:
-        summary_html += f'<p>{paragraph}</p>\n'
-
-    new_html = new_html.replace('<div class="article-summary">\n                        <p>Bread making is a multistep process that combines science and artistry. From gathering ingredients to the final rise and baking, each step presents unique automation opportunities. At present, commercial bakeries have achieved partial automation, with certain processes still benefiting from human expertise and intervention.</p>\n                        <p>This workflow breaks down the bread making process into manageable steps, illustrating both current automation capabilities and areas for future development.</p>\n                    </div>',
-                      f'<div class="article-summary">\n{summary_html}</div>')
-
-    # Generate tab content
-    standard_process_html = generate_standard_process_html(tree_data)
-    automation_pathway_html = generate_automation_pathway_html(adoption_data, implementation_data, roi_data)
-    technical_details_html = generate_technical_details_html(future_tech_data, specs_data)
-    competing_approaches_html = generate_competing_approaches_html(alt_trees_data)
-
-    # Generate timeline and challenges HTML
-    timeline_html = generate_automation_timeline_html(timeline_data)
-    challenges_html = generate_automation_challenges_html(challenges_data)
-
-    # Replace placeholders in standard process tab
-    standard_process_html = standard_process_html.replace("{{TIMELINE_PLACEHOLDER}}", timeline_html)
-    standard_process_html = standard_process_html.replace("{{CHALLENGES_PLACEHOLDER}}", challenges_html)
-
-    # Replace tab content in the template
-    tab_content_start = new_html.find('<!-- Standard Process Tab Content -->')
-    tab_content_end = new_html.find('<!-- Footer placeholder to be filled by components.js -->')
-
-    tab_content = (
-        '<!-- Standard Process Tab Content -->\n'
-        f'{standard_process_html}\n'
-        '<!-- Automation Pathway Tab Content -->\n'
-        f'{automation_pathway_html}\n'
-        '<!-- Technical Details Tab Content -->\n'
-        f'{technical_details_html}\n'
-        '<!-- Competing Approaches Tab Content -->\n'
-        f'{competing_approaches_html}\n'
-        '                    <div class="contributors-section">\n'
-        '                        <h3>Contributors</h3>\n'
-        f'                        <p>This workflow was developed using Iterative AI analysis of {metadata["page_metadata"]["title"].lower()} processes with input from professional engineers and automation experts.</p>\n'
-        '                        <p><em>Last updated: April 2024</em></p>\n'
-        '                        <a href="#" class="button secondary" id="suggest-improvements">Suggest Improvements</a>\n'
-        '                        \n'
-        '                        <!-- Feedback form container (initially hidden) -->\n'
-        '                        <div id="feedback-form-container" class="feedback-form-container">\n'
-        '                            <h4>Suggest Improvements</h4>\n'
-        f'                            <p>We value your input on how to improve this {metadata["page_metadata"]["title"].lower()} workflow. Please provide your suggestions below.</p>\n'
-        '                            \n'
-        '                            <form id="feedback-form" class="feedback-form">\n'
-        '                                <div class="feedback-form-field">\n'
-        '                                    <label for="feedback-name">Name (optional)</label>\n'
-        '                                    <input type="text" id="feedback-name" name="name" placeholder="Your name">\n'
-        '                                </div>\n'
-        '                                \n'
-        '                                <div class="feedback-form-field">\n'
-        '                                    <label for="feedback-email">Email (optional)</label>\n'
-        '                                    <input type="email" id="feedback-email" name="email" placeholder="your@email.com">\n'
-        '                                </div>\n'
-        '                                \n'
-        '                                <div class="feedback-form-field">\n'
-        '                                    <label for="feedback-subject">Subject</label>\n'
-        '                                    <input type="text" id="feedback-subject" name="subject" placeholder="Brief description of your suggestion" required>\n'
-        '                                </div>\n'
-        '                                \n'
-        '                                <div class="feedback-form-field">\n'
-        '                                    <label for="feedback-body">Feedback Details</label>\n'
-        '                                    <textarea id="feedback-body" name="message" placeholder="Please describe your suggestion in detail..." required></textarea>\n'
-        '                                </div>\n'
-        '                                \n'
-        '                                <div class="feedback-actions">\n'
-        '                                    <button type="button" id="cancel-feedback" class="button secondary">Cancel</button>\n'
-        '                                    <button type="submit" id="send-feedback" class="button primary">Send Feedback</button>\n'
-        '                                </div>\n'
-        '                            </form>\n'
-        '                            \n'
-        '                            <div id="feedback-message" class="feedback-message"></div>\n'
-        '                        </div>\n'
-        '                    </div>\n'
-    )
-
-    new_html = new_html[:tab_content_start] + tab_content + new_html[tab_content_end:]
-
-    # Update breadcrumb
-    if breadcrumbs:
-        breadcrumbs_html = generate_breadcrumbs_html(breadcrumbs)
-        # Find and replace the entire default breadcrumbs section
-        breadcrumbs_start = new_html.find('<div class="breadcrumbs">')
-        if breadcrumbs_start != -1:
-            breadcrumbs_end = new_html.find('</div>', breadcrumbs_start) + 6  # Include the closing </div>
-            new_html = new_html[:breadcrumbs_start] + breadcrumbs_html + new_html[breadcrumbs_end:]
+    if summary_content:
+        # Ensure summary is a list of strings (paragraphs)
+        if isinstance(summary_content, str):
+            # Split string by double newlines to get paragraphs, stripping whitespace
+            result['summary_paragraphs'] = [p.strip() for p in summary_content.split('\n\n') if p.strip()]
+        elif isinstance(summary_content, list):
+            # Assume it's already a list of paragraphs (strings)
+            result['summary_paragraphs'] = [str(p).strip() for p in summary_content if str(p).strip()]
         else:
-            # Fallback if the exact structure isn't found
-            new_html = new_html.replace('<span><a href="/food-production/baking/index">Baking</a></span>', breadcrumbs_html)
+            result['summary_paragraphs'] = [] # Fallback for unexpected types
+    else:
+        result['summary_paragraphs'] = []
 
-    return new_html
+    # Ensure other required fields have defaults if missing
+    result.setdefault('title', 'Untitled Page')
+    result.setdefault('subtitle', '')
+    # Use 'automation_status' as fallback for 'status'
+    result.setdefault('status', result.get('automation_status', 'Unknown'))
+    result.setdefault('contributors', 'N/A')
+    # Set standard contributors text
+    result['contributors'] = "This workflow was developed using Iterative AI analysis with input from subject matter experts and automation engineers."
+
+    # Set last updated date
+    now = datetime.now()
+    result['last_updated'] = now.strftime("%B %Y") # e.g., April 2025
+
+    # Add breadcrumb string read from file
+    result['breadcrumbs'] = breadcrumb_str
+
+    return result
+
+def process_breadcrumbs(breadcrumbs_str):
+    """Process breadcrumbs string into a list of dictionaries with names and URLs."""
+    if not breadcrumbs_str:
+        return []
+
+    parts = [part for part in breadcrumbs_str.strip('/').split('/') if part]
+    result = []
+    current_path = ""
+
+    # Add Home breadcrumb
+    result.append({'name': 'Home', 'url': '/index'})
+
+    for i, part in enumerate(parts):
+        # Build cumulative path, ensuring no double slashes
+        current_path = f"{current_path}/{part}".replace('//', '/')
+        display_name = part.replace('-', ' ').title()
+
+        # Determine URL - only add index if it's not the last part
+        url = f"{current_path}/index" if i < len(parts) - 1 else None
+
+        result.append({
+            'name': display_name,
+            'url': url
+        })
+
+    return result
 
 def main():
-    """Main function to generate HTML based on JSON files."""
-    usage_msg = "Usage: python assemble.py <flow_dir> [output_path] [breadcrumbs]"
-    
-    if len(sys.argv) < 2:
-        print(usage_msg)
+    # Correct argument check: script name + 2 arguments = 3
+    if len(sys.argv) != 3:
+        print("Usage: python assemble.py <files_dir> <output_dir>")
         sys.exit(1)
-        
-    flow_dir = sys.argv[1]
-    output_path = sys.argv[2] if len(sys.argv) > 2 else None
-    breadcrumbs = sys.argv[3] if len(sys.argv) > 3 else None
-    
-    # Check if breadcrumbs file exists in the flow directory and use it if no breadcrumbs provided
-    breadcrumbs_file = os.path.join(flow_dir, "breadcrumbs.txt")
-    if not breadcrumbs and os.path.exists(breadcrumbs_file):
-        with open(breadcrumbs_file, "r", encoding="utf-8") as f:
-            breadcrumbs = f.read().strip()
-    
-    # Check if the flow directory exists
-    if not os.path.isdir(flow_dir):
-        print(f"Error: Flow directory '{flow_dir}' not found")
-        sys.exit(1)
-    
-    # Define paths to JSON files in the flow directory
-    metadata_path = os.path.join(flow_dir, "1.json")
-    tree_path = os.path.join(flow_dir, "2.json")
-    timeline_path = os.path.join(flow_dir, "3.json")
-    challenges_path = os.path.join(flow_dir, "4.json")
-    adoption_path = os.path.join(flow_dir, "5.json")
-    implementation_path = os.path.join(flow_dir, "6.json")
-    roi_path = os.path.join(flow_dir, "7.json")
-    future_tech_path = os.path.join(flow_dir, "8.json")
-    specs_path = os.path.join(flow_dir, "9.json")
-    
-    # Find alternative tree files if they exist
-    alternative_trees = []
-    i = 1
-    while True:
-        alt_path = os.path.join(flow_dir, f"alt{i}.json")
-        if os.path.exists(alt_path):
-            alternative_trees.append(alt_path)
-            i += 1
-        else:
-            break
-    
-    print(f"Found {len(alternative_trees)} alternative tree files")
-    
-    # Path to the template HTML
-    template_path = os.path.join("flow", "template.html")
-    
-    # If template doesn't exist in the specified location, try a relative path
-    if not os.path.exists(template_path):
-        template_path = "template.html"
-        
-        # If that doesn't exist either, check if it exists in the flow directory
-        if not os.path.exists(template_path):
-            template_path = os.path.join(flow_dir, "..", "template.html")
-    
-    # Read template HTML
-    try:
-        with open(template_path, "r", encoding="utf-8") as f:
-            template_html = f.read()
-    except FileNotFoundError:
-        print(f"Error: Template HTML file not found at '{template_path}'")
-        sys.exit(1)
-    
-    try:
-        # Read JSON data
-        metadata = read_json_file(metadata_path)
-        tree_data = read_json_file(tree_path)
-        timeline_data = read_json_file(timeline_path)
-        challenges_data = read_json_file(challenges_path)
-        adoption_data = read_json_file(adoption_path)["automation_adoption"]
-        implementation_data = read_json_file(implementation_path)
-        roi_data = read_json_file(roi_path)
-        
-        # Ensure roi_data is properly structured for use
-        if "roi_analysis" not in roi_data and "roi_analysis" in roi_data:
-            # This is a no-op condition, left for clarity
-            pass
-        else:
-            # Create a normalized structure
-            roi_data = {"roi_analysis": roi_data}
-        
-        future_tech_data = read_json_file(future_tech_path)["future_technology"]
-        specs_data = read_json_file(specs_path)["industrial_specifications"]
-        
-        # Process alternative trees
-        alt_trees_data = []
-        approach_names = ["Efficiency-Optimized Approach", "Safety-Optimized Approach", "Hybridized Approach"]
-        approach_descs = [
-            "This approach prioritizes minimizing resource usage and production time.",
-            "This approach focuses on maximizing safety and reliability.",
-            "This approach balances efficiency with safety considerations."
-        ]
-        
-        for i, alt_path in enumerate(alternative_trees):
-            try:
-                alt_data = read_json_file(alt_path)
-                # Add names and descriptions
-                approach_name = approach_names[i] if i < len(approach_names) else f"Alternative Approach {i+1}"
-                approach_desc = approach_descs[i] if i < len(approach_descs) else "An alternative methodology for approaching this process."
-                alt_data["approach_name"] = approach_name
-                alt_data["approach_description"] = approach_desc
-                alt_trees_data.append(alt_data)
-            except Exception as e:
-                print(f"Warning: Error processing alternative tree {alt_path}: {e}")
-                continue
 
-        # Generate new HTML page
-        new_html = generate_page_html(
-            template_html,
-            metadata,
-            tree_data,
-            timeline_data,
-            challenges_data,
-            adoption_data,
-            implementation_data,
-            roi_data,
-            future_tech_data,
-            specs_data,
-            breadcrumbs,
-            alt_trees_data
+    files_dir_path = sys.argv[1] # This should be the directory path, e.g., flow/ce6c090c...
+    output_dir = sys.argv[2]
+
+    # Correct path derivation: JSON files are directly inside files_dir_path
+    metadata_path = os.path.join(files_dir_path, "1.json")
+    tree_path = os.path.join(files_dir_path, "2.json")
+    timeline_path = os.path.join(files_dir_path, "3.json")
+    challenges_path = os.path.join(files_dir_path, "4.json")
+    adoption_path = os.path.join(files_dir_path, "5.json")
+    implementation_path = os.path.join(files_dir_path, "6.json")
+    roi_path = os.path.join(files_dir_path, "7.json")
+    future_tech_path = os.path.join(files_dir_path, "8.json")
+    specs_path = os.path.join(files_dir_path, "9.json")
+
+    try:
+        # Load all required JSON data
+        metadata_raw = read_json_file(metadata_path)
+        tree_data = read_json_file(tree_path)
+
+        # Load optional JSON data with fallbacks
+        timeline_data = read_json_file(timeline_path) if os.path.exists(timeline_path) else {}
+        challenges_data = read_json_file(challenges_path) if os.path.exists(challenges_path) else {}
+        adoption_data = read_json_file(adoption_path) if os.path.exists(adoption_path) else {}
+        implementation_data = read_json_file(implementation_path) if os.path.exists(implementation_path) else {}
+        roi_data = read_json_file(roi_path) if os.path.exists(roi_path) else {}
+        future_tech_data = read_json_file(future_tech_path) if os.path.exists(future_tech_path) else {}
+        specs_data = read_json_file(specs_path) if os.path.exists(specs_path) else {}
+
+        # --- Read Breadcrumbs File ---
+        breadcrumb_file_path = os.path.join(files_dir_path, "breadcrumbs.txt")
+        breadcrumb_string = ""
+        if os.path.exists(breadcrumb_file_path):
+            try:
+                with open(breadcrumb_file_path, 'r', encoding='utf-8') as bf:
+                    breadcrumb_string = bf.read().strip()
+            except Exception as bc_err:
+                print(f"Warning: Could not read breadcrumbs file {breadcrumb_file_path}: {bc_err}", file=sys.stderr)
+        else:
+             print(f"Warning: Breadcrumbs file not found at {breadcrumb_file_path}", file=sys.stderr)
+
+        # Load alternative approaches if they exist
+        alt_trees_data = []
+        if os.path.exists(files_dir_path): # Check if files_dir_path exists
+            for filename in os.listdir(files_dir_path): # Iterate through files_dir_path
+                if filename.startswith('alt') and filename.endswith('.json'):
+                    try:
+                        alt_tree = read_json_file(os.path.join(files_dir_path, filename))
+                        # Add preview text directly to each alternative tree dictionary
+                        if isinstance(alt_tree, dict) and 'tree' in alt_tree:
+                             alt_tree['preview_text'] = generate_tree_preview_text(alt_tree)
+                             # Add other potential fields needed by template card, e.g., title, creator
+                             alt_tree.setdefault('title', alt_tree.get('tree', {}).get('step', 'Alternative Approach'))
+                             alt_tree.setdefault('creator', 'Iterative AI') # Example default
+                             alt_tree.setdefault('votes', 0) # Example default
+                             alt_trees_data.append(alt_tree)
+                        else:
+                             print(f"Warning: Skipping invalid alternative file {filename}", file=sys.stderr)
+                    except Exception as alt_err:
+                        print(f"Warning: Could not load or process alternative file {filename}: {alt_err}", file=sys.stderr)
+
+
+        # Set up Jinja2 environment
+        env = Environment(
+            loader=FileSystemLoader('templates'),
+            autoescape=True, # Keep autoescape True for security
+            trim_blocks=True,
+            lstrip_blocks=True
         )
 
-        # Determine output path
-        if output_path is None:
-            # Save to the flow directory by default
-            output_path = os.path.join(flow_dir, "output.html")
-        
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        # Add custom filters
+        env.filters['process_bold'] = process_bold_text
 
-        # Write the generated HTML to a file
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(new_html)
+        # Register generate_tree_preview_text as a global function (still useful if template calls it)
+        env.globals['generate_tree_preview_text'] = generate_tree_preview_text
+        env.globals['enumerate'] = enumerate  # Make enumerate available in templates
 
-        print(f"Generated HTML page: {os.path.abspath(output_path)}")
-        
-    except FileNotFoundError as e:
-        print(f"Error: Missing required JSON file: {e}")
-        sys.exit(1)
-    except KeyError as e:
-        print(f"Error: Invalid JSON structure: {e}")
-        sys.exit(1)
+        # Load template
+        template = env.get_template('page-template.html')
+
+        # Process data before adding to context (pass breadcrumb string)
+        processed_metadata = process_metadata(metadata_raw, breadcrumb_string)
+        # Now process the breadcrumbs string stored within processed_metadata
+        processed_breadcrumbs = process_breadcrumbs(processed_metadata.get('breadcrumbs', ''))
+
+        # --- Process Timeline Data ---
+        timeline_entries = []
+        timeline_content = timeline_data.get('timeline', {})
+        for year, content in timeline_content.get('historical', {}).items():
+            timeline_entries.append({'year': year, 'content': content, 'is_prediction': False})
+        for year, content in timeline_content.get('predictions', {}).items():
+            timeline_entries.append({'year': year, 'content': content, 'is_prediction': True})
+        # Sort entries (optional, depends on desired order)
+        # timeline_entries.sort(key=lambda x: x['year']) # Simple sort might fail with year ranges
+
+        # --- Process Adoption Data ---
+        adoption_stages = []
+        adoption_content = adoption_data.get('automation_adoption', {})
+        # Sort by phase key (phase1, phase2, ...) if needed
+        for phase_key in sorted(adoption_content.keys()):
+            if phase_key.startswith('phase'):
+                adoption_stages.append(adoption_content[phase_key])
+
+        # --- Process ROI Data ---
+        roi_points = []
+        roi_scales_data = roi_data.get('roi_analysis', {}).get('roi_analysis', {})
+        for scale_key, scale_data in roi_scales_data.items():
+            if isinstance(scale_data, dict) and 'timeframe' in scale_data:
+                 roi_points.append({'scale': scale_key, 'timeframe': scale_data['timeframe']})
+        key_benefits_list = roi_data.get('roi_analysis', {}).get('key_benefits', [])
+
+        # --- Process Future Technology Data ---
+        future_technologies = []
+        future_tech_content = future_tech_data.get('future_technology', {})
+        categories = {
+            'sensory_systems': 'Sensory Systems',
+            'control_systems': 'Control Systems',
+            'mechanical_systems': 'Mechanical Systems',
+            'software_integration': 'Software Integration'
+        }
+        for category_key, category_name in categories.items():
+            for tech_item in future_tech_content.get(category_key, []):
+                if isinstance(tech_item, dict):
+                    tech_item['category'] = category_name # Add category for template grouping
+                    future_technologies.append(tech_item)
+
+        # --- Prepare context with processed and structured data ---
+        context = {
+            # Use processed metadata
+            'metadata': processed_metadata,
+            # Main process tree
+            'tree': tree_data.get('tree', {}),
+            # Use processed lists/data
+            'timeline_entries': timeline_entries,
+            'challenge_points': challenges_data.get('challenges', {}).get('challenges', []), # Use 'challenges' list
+            'adoption_stages': adoption_stages,
+            'implementation_levels': implementation_data.get('implementation_assessment', {}).get('process_steps', []), # Use 'process_steps' list
+            'roi_points': roi_points,
+            'key_benefits': key_benefits_list,
+            'future_technologies': future_technologies,
+            # Use correct keys for specifications
+            'spec_performance': specs_data.get('industrial_specifications', {}).get('performance_metrics', []),
+            'spec_requirements': specs_data.get('industrial_specifications', {}).get('implementation_requirements', []),
+            # Use processed breadcrumbs
+            'breadcrumbs': processed_breadcrumbs,
+            # Pass alternatives with pre-generated preview text
+            'alternatives': alt_trees_data
+        }
+
+        # Render template
+        output_html = template.render(context)
+
+        # Write output
+        # Generate slug from processed metadata title
+        slug = processed_metadata.get('slug', processed_metadata.get('title', 'output').lower().replace(' ', '-'))
+        # Ensure slug is filesystem-safe (basic example)
+        slug = "".join(c for c in slug if c.isalnum() or c in ('-', '_')).rstrip() or "output"
+        output_path = Path(output_dir) / f"{slug}.html"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(output_html)
+
+        print(f"Generated HTML page: {output_path}")
+
+    except FileNotFoundError as fnf_error:
+         print(f"Error: Input file not found - {fnf_error}", file=sys.stderr)
+         sys.exit(1)
+    except json.JSONDecodeError as json_error:
+         print(f"Error: Failed to decode JSON - {json_error}", file=sys.stderr)
+         sys.exit(1)
     except Exception as e:
-        print(f"Error generating HTML: {e}")
+        print(f"An unexpected error occurred: {str(e)}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         sys.exit(1)
 
 if __name__ == "__main__":

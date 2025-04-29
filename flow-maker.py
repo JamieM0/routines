@@ -85,26 +85,36 @@ def main():
         ("return-analysis.py", "7.json"),  # 7. return-analysis.py
         ("future-technology.py", "8.json"),  # 8. future-technology.py
         ("specifications-industrial.py", "9.json"),  # 9. specifications-industrial.py
-        ("assemble.py", "10.json"),  # 10. assemble.py
+        ("assemble.py", None),  # 10. assemble.py - Output filename handled differently
     ]
     
     # Run each program in sequence
     for i, (program, output_filename) in enumerate(programs):
         print(f"\nStep {i+1}/{len(programs)}: Running {program}")
+
+        # Default input is the copied input.json
+        current_input_path = input_copy_path
         
         # Define output path for this program
-        output_path = os.path.join(flow_dir, output_filename)
-        
-        # Handle special parameters for hallucinate-tree.py
-        extra_args = ["-saveInputs", "-flow_uuid="+flow_uuid]
-        if program == "hallucinate-tree.py":
-            extra_args += ["-flat"]
+        # For assemble.py, the output path is the flow directory itself
+        if program == "assemble.py":
+            output_path = flow_dir
+            current_input_path = flow_dir # assemble.py takes the flow dir as input now
+            extra_args = None # assemble.py doesn't need extra args like this
+        else:
+            output_path = os.path.join(flow_dir, output_filename)
+            # Handle special parameters for hallucinate-tree.py
+            extra_args = ["-saveInputs", "-flow_uuid="+flow_uuid]
+            if program == "hallucinate-tree.py":
+                extra_args += ["-flat"]
         
         # Run the program
-        success = run_program(program, input_copy_path, output_path, extra_args)
+        success = run_program(program, current_input_path, output_path, extra_args)
 
         if not success:
             print(f"Warning: {program} failed to complete successfully")
+            # Optionally, decide if the flow should stop if a step fails
+            # sys.exit(1)
     
     # Generate alternative trees if specified in the input
     num_alternatives = input_data.get("alternatives", 0)
@@ -174,29 +184,7 @@ def main():
     with open(metadata_path, "w", encoding="utf-8") as f:
         json.dump(flow_metadata, f, indent=4)
     
-    # Now run assemble.py to generate the HTML output
-    print("\nGenerating HTML output using assemble.py...")
-    
-    # Determine the output filename based on breadcrumbs if available
-    output_filename = "output.html"
-    if breadcrumbs:
-        # Extract the last part of the breadcrumbs to use as the filename
-        page_name = breadcrumbs.split('/')[-1]
-        output_filename = f"{page_name}.html"
-    
-    html_output_path = os.path.join(flow_dir, output_filename)
-    
-    # Add breadcrumbs_path as an additional argument to assemble.py if available
-    extra_args = []
-    if breadcrumbs:
-        extra_args = [breadcrumbs]
-        
-    assemble_success = run_program("assemble.py", flow_dir, html_output_path, extra_args)
-    
-    if assemble_success:
-        print(f"HTML output generated successfully at: {os.path.abspath(html_output_path)}")
-    else:
-        print("Warning: HTML generation failed")
+    # HTML generation is now handled within the main loop
     
     print(f"\nFlow process completed in {time_taken}")
     print(f"Output files saved to: {os.path.abspath(flow_dir)}")
