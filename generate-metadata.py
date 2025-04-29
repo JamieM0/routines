@@ -2,7 +2,7 @@ import json
 import sys
 from datetime import datetime
 from utils import (
-    load_json, save_output, chat_with_llm,
+    load_json, save_output, chat_with_llm, parse_llm_json_response,
     create_output_metadata, get_output_filepath, handle_command_args,
     saveToFile
 )
@@ -41,36 +41,12 @@ def generate_page_metadata(input_data, save_inputs=False):
     
     # Use chat_with_llm to generate metadata
     response = chat_with_llm(model, systemMsg, user_msg, parameters)
-    
-    try:
-        # Try to parse JSON response directly
-        metadata = json.loads(response)
-        return metadata
-    except json.JSONDecodeError:
-        # Check if response contains code fence markers
-        if "```json" in response:
-            try:
-                # Extract content between code fence markers
-                json_content = response.split("```json", 1)[1].split("```", 1)[0].strip()
-                metadata = json.loads(json_content)
-                return metadata
-            except (json.JSONDecodeError, IndexError) as e:
-                print(f"Error extracting JSON from code block: {str(e)}")
-        
-        # Alternative approach - try to find JSON-like content
-        try:
-            # Look for content between curly braces
-            if "{" in response and "}" in response:
-                start = response.find("{")
-                end = response.rfind("}") + 1
-                potential_json = response[start:end]
-                metadata = json.loads(potential_json)
-                return metadata
-        except json.JSONDecodeError:
-            pass
-            
-        print("Error: LLM response is not valid JSON. Full response: " + response)
+    # Parse JSON using shared utility to extract JSON block reliably
+    metadata = parse_llm_json_response(response)
+    if not isinstance(metadata, dict):
+        print("Error: Parsed metadata is not a JSON object. Full response: " + response)
         return None
+    return metadata
 
 def main():
     """Main function to run the metadata generation."""

@@ -4,6 +4,7 @@ import uuid
 import sys
 from datetime import datetime
 import os
+import re
 
 def load_json(filepath):
     """Load JSON input file."""
@@ -69,9 +70,15 @@ def chat_with_llm(model, system_message, user_message, parameters=None):
 
 def clean_llm_json_response(response_text):
     """Clean an LLM response to extract valid JSON."""
-    # Remove markdown code blocks
-    response_text = response_text.replace("```json", "").replace("```", "").strip()
-    return response_text
+    # Remove markdown code fences
+    text = response_text.strip()
+    text = text.replace("```json", "").replace("```", "")
+    # Extract JSON object or array from text
+    match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text, re.S)
+    if match:
+        return match.group(1)
+    # Fallback: return cleaned text
+    return text
 
 def parse_llm_json_response(response_text, include_children=False):
     """Parse JSON from an LLM response with fallback handling.
