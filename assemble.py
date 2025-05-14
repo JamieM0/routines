@@ -83,6 +83,8 @@ def process_metadata(metadata, breadcrumb_str):
         progress_text = result['automation_progress']
     elif 'progress_percentage' in result:
         progress_text = result['progress_percentage']
+    elif 'progress_estimate' in result: # Added to check for progress_estimate
+        progress_text = result['progress_estimate']
     else:
         progress_text = "0"  # Default fallback to 0 if missing
 

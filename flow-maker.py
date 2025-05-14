@@ -10,16 +10,17 @@ from utils import (
 )
 
 def run_program(program_name, input_path, output_path, extra_args=None):
-    """Run a program with the specified input and output paths."""
+    """
+    Run a program with the specified input and output paths.
+    Returns 'success', 'retry', 'continue', or 'stop' based on execution and user input.
+    """
     print(f"Running {program_name}...")
     
-    # Build command with any extra arguments
     command = [sys.executable, program_name, input_path, output_path]
     if extra_args:
         command.extend(extra_args)
         
     try:
-        # Run the program and capture its output
         result = subprocess.run(
             command,
             capture_output=True,
@@ -27,13 +28,28 @@ def run_program(program_name, input_path, output_path, extra_args=None):
             check=True
         )
         print(f"  {program_name} completed successfully")
-        print(f"  {result.stdout.strip()}")
-        return True
+        if result.stdout.strip():
+            print(f"  STDOUT: {result.stdout.strip()}")
+        if result.stderr.strip():
+            print(f"  STDERR: {result.stderr.strip()}")
+        return "success"
     except subprocess.CalledProcessError as e:
         print(f"  ERROR running {program_name}: {e}")
-        print(f"  STDOUT: {e.stdout}")
-        print(f"  STDERR: {e.stderr}")
-        return False
+        if e.stdout:
+            print(f"  STDOUT: {e.stdout.strip()}")
+        if e.stderr:
+            print(f"  STDERR: {e.stderr.strip()}")
+        
+        while True:
+            choice = input(f"Program {program_name} failed. Choose action: (c)ontinue, (r)etry, (s)top: ").lower()
+            if choice == 'c':
+                return "continue"
+            elif choice == 'r':
+                return "retry"
+            elif choice == 's':
+                return "stop"
+            else:
+                print("Invalid choice. Please enter 'c', 'r', or 's'.")
 
 def main():
     """Main function to run the flow of programs."""
@@ -89,33 +105,37 @@ def main():
     ]
     
     # Run each program in sequence
-    for i, (program, output_filename) in enumerate(programs):
-        print(f"\nStep {i+1}/{len(programs)}: Running {program}")
+    program_idx = 0
+    while program_idx < len(programs):
+        program, output_filename = programs[program_idx]
+        print(f"\nStep {program_idx + 1}/{len(programs)}: Running {program}")
 
-        # Default input is the copied input.json
         current_input_path = input_copy_path
         
-        # Define output path for this program
-        # For assemble.py, the output path is the flow directory itself
         if program == "assemble.py":
             output_path = flow_dir
-            current_input_path = flow_dir # assemble.py takes the flow dir as input now
-            extra_args = None # assemble.py doesn't need extra args like this
+            current_input_path = flow_dir
+            extra_args = None
         else:
             output_path = os.path.join(flow_dir, output_filename)
-            # Handle special parameters for hallucinate-tree.py
-            extra_args = ["-saveInputs", "-flow_uuid="+flow_uuid]
+            extra_args = ["-saveInputs", "-flow_uuid=" + flow_uuid]
             if program == "hallucinate-tree.py":
                 extra_args += ["-flat"]
         
-        # Run the program
-        success = run_program(program, current_input_path, output_path, extra_args)
+        status = run_program(program, current_input_path, output_path, extra_args)
 
-        if not success:
-            print(f"Warning: {program} failed to complete successfully")
-            # Optionally, decide if the flow should stop if a step fails
-            # sys.exit(1)
-    
+        if status == "success":
+            program_idx += 1
+        elif status == "continue":
+            print(f"Warning: {program} failed, but user chose to continue.")
+            program_idx += 1
+        elif status == "retry":
+            print(f"User chose to retry {program}.")
+            # The loop will re-run the current program_idx
+        elif status == "stop":
+            print(f"User chose to stop the flow after {program} failed.")
+            sys.exit(1)
+            
     # Generate alternative trees if specified in the input
     num_alternatives = input_data.get("alternatives", 0)
     if num_alternatives > 0:
@@ -159,13 +179,35 @@ def main():
                 json.dump(alt_input, f, indent=4)
             
             # Run hallucinate-tree.py with the alternative input
-            alt_success = run_program("hallucinate-tree.py", alt_input_path, alt_output_path, ["-flat"])
+            alt_status = "retry"
+            while alt_status == "retry": # Loop to allow retrying the alternative generation
+                alt_status = run_program("hallucinate-tree.py", alt_input_path, alt_output_path, ["-flat", "-flow_uuid="+flow_uuid]) # Added flow_uuid
             
-            if alt_success:
-                print(f"  Alternative tree {i+1} generated successfully at {alt_output_path}")
-            else:
-                print(f"  Warning: Failed to generate alternative tree {i+1}")
-    
+                if alt_status == "success":
+                    print(f"  Alternative tree {i+1} generated successfully at {alt_output_path}")
+                elif alt_status == "continue":
+                    print(f"  Warning: Failed to generate alternative tree {i+1}. User chose to continue.")
+                    break # Break from retry loop, continue to next alternative
+                elif alt_status == "stop":
+                    print(f"  User chose to stop the flow during alternative tree generation for {alt_input_path}.")
+                    # Create flow metadata before exiting
+                    end_time = datetime.now()
+                    time_taken = end_time - start_time
+                    flow_metadata = {
+                        "uuid": flow_uuid,
+                        "date_created": end_time.isoformat(),
+                        "task": "Complete Automation Flow (interrupted)",
+                        "time_taken": str(time_taken),
+                        "input_file": input_filepath,
+                        "programs_run": [p[0] for p in programs[:program_idx]] # Log programs run so far
+                    }
+                    metadata_path = os.path.join(flow_dir, "flow-metadata.json")
+                    with open(metadata_path, "w", encoding="utf-8") as f:
+                        json.dump(flow_metadata, f, indent=4)
+                    print(f"\nFlow process interrupted. Partial output files saved to: {os.path.abspath(flow_dir)}")
+                    sys.exit(1)
+                # If 'retry', the loop continues
+
     # Create flow metadata
     end_time = datetime.now()
     time_taken = end_time - start_time
