@@ -1,3 +1,6 @@
+> [!IMPORTANT]
+> This repository has been archived. It is no longer active and should be ignored. Please use the updated repository for the main Universal Automation Wiki repository located [here](https://jamiem.me/uaw-github)
+
 # Basic Programs
 Each program is designed to do 1 well-defined, specific thing, working together they can do a much better job at achieving an overall goal when compared to just asking a large language model to do the work towards the overall goal itself.
 
